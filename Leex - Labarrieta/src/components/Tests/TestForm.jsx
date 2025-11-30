@@ -115,6 +115,7 @@ const TestForm = ({ test, defibrillators, templates, onClose, onSuccess }) => {
           if (item.id) {
             await testsService.updateItem(item.id, {
               checked: item.checked,
+              result: item.result || (item.checked ? 'pass' : null), // Mantener result si existe, o inferirlo de checked
               value: item.value,
               notes: item.notes
             })
@@ -123,6 +124,7 @@ const TestForm = ({ test, defibrillators, templates, onClose, onSuccess }) => {
               item_key: item.item_key,
               item_label: item.item_label,
               checked: item.checked,
+              result: item.result || (item.checked ? 'pass' : null), // Mantener result si existe
               value: item.value,
               notes: item.notes
             }])
@@ -136,6 +138,7 @@ const TestForm = ({ test, defibrillators, templates, onClose, onSuccess }) => {
             item_key: item.item_key,
             item_label: item.item_label,
             checked: item.checked,
+            result: item.result || (item.checked ? 'pass' : null), // Mantener result si existe
             value: item.value,
             notes: item.notes
           })))

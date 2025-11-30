@@ -189,6 +189,7 @@ const TestWizard = ({ defibrillators, templates, onClose, onSuccess }) => {
           item_key: item.item_key,
           item_label: item.item_label,
           checked: item.result === 'pass',
+          result: item.result || null, // Guardar el resultado: 'pass', 'fail', 'na'
           value: item.value || '',
           notes: item.notes || ''
         })))
