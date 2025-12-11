@@ -10,8 +10,10 @@ const Defibrillators = () => {
   const [clients, setClients] = useState([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
+  const [activeTab, setActiveTab] = useState('new') // 'new' o 'installed'
   const [showForm, setShowForm] = useState(false)
   const [editingDefibrillator, setEditingDefibrillator] = useState(null)
+  const [equipmentType, setEquipmentType] = useState('new') // 'new' o 'installed'
   const [viewingLifeSheet, setViewingLifeSheet] = useState(null)
   const [error, setError] = useState(null)
 
@@ -44,13 +46,18 @@ const Defibrillators = () => {
     }
   }
 
-  const handleCreate = () => {
+  const handleCreate = (type = 'new') => {
     setEditingDefibrillator(null)
+    setEquipmentType(type)
     setShowForm(true)
   }
 
   const handleEdit = (defibrillator) => {
     setEditingDefibrillator(defibrillator)
+    // Determinar tipo basado en los campos existentes
+    const isNew = defibrillator.installation_date && defibrillator.periodo_garantia
+    const isInstalled = defibrillator.año_fabricacion || defibrillator.primera_intervencion_lex
+    setEquipmentType(isInstalled ? 'installed' : (isNew ? 'new' : 'new'))
     setShowForm(true)
   }
 
@@ -91,7 +98,24 @@ const Defibrillators = () => {
     loadData()
   }
 
+  // Filtrar por tipo de equipo
+  const getEquipmentType = (def) => {
+    const hasNewFields = def.installation_date && def.periodo_garantia
+    const hasInstalledFields = def.año_fabricacion || def.primera_intervencion_lex
+    
+    if (hasInstalledFields) return 'installed'
+    if (hasNewFields) return 'new'
+    // Si no tiene ninguno, lo consideramos "nuevo" por defecto
+    return 'new'
+  }
+
   const filteredDefibrillators = defibrillators.filter(def => {
+    // Filtrar por tipo de equipo según la pestaña activa
+    const type = getEquipmentType(def)
+    if (activeTab === 'new' && type !== 'new') return false
+    if (activeTab === 'installed' && type !== 'installed') return false
+    
+    // Filtrar por búsqueda
     if (!searchTerm) return true
     const term = searchTerm.toLowerCase()
     return (
@@ -105,18 +129,44 @@ const Defibrillators = () => {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Desfibriladores</h1>
-          <p className="text-gray-600 mt-1">Gestiona los equipos de tus clientes</p>
+      <div className="mb-6">
+        <div className="flex justify-between items-center mb-4">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Desfibriladores</h1>
+            <p className="text-gray-600 mt-1">Gestiona los equipos de tus clientes</p>
+          </div>
+          <button 
+            onClick={() => handleCreate(activeTab)}
+            className="btn-primary flex items-center gap-2"
+          >
+            <Plus className="w-5 h-5" />
+            {activeTab === 'new' ? 'Nuevo Equipo' : 'Equipo Instalado'}
+          </button>
         </div>
-        <button 
-          onClick={handleCreate}
-          className="btn-primary flex items-center gap-2"
-        >
-          <Plus className="w-5 h-5" />
-          Nuevo Desfibrilador
-        </button>
+
+        {/* Tabs para Equipos Nuevos / Ya Instalados */}
+        <div className="flex gap-2 border-b border-gray-200">
+          <button
+            onClick={() => setActiveTab('new')}
+            className={`px-6 py-3 font-medium transition-colors ${
+              activeTab === 'new'
+                ? 'border-b-2 border-primary-600 text-primary-600'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            Equipos Nuevos
+          </button>
+          <button
+            onClick={() => setActiveTab('installed')}
+            className={`px-6 py-3 font-medium transition-colors ${
+              activeTab === 'installed'
+                ? 'border-b-2 border-primary-600 text-primary-600'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            Equipos Ya Instalados
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -185,6 +235,17 @@ const Defibrillators = () => {
                   <th className="text-left py-3 px-4 font-semibold text-gray-700">Modelo</th>
                   <th className="text-left py-3 px-4 font-semibold text-gray-700">N° Serie</th>
                   <th className="text-left py-3 px-4 font-semibold text-gray-700">Ubicación</th>
+                  {activeTab === 'new' ? (
+                    <>
+                      <th className="text-left py-3 px-4 font-semibold text-gray-700">Fecha Instalación</th>
+                      <th className="text-left py-3 px-4 font-semibold text-gray-700">Garantía</th>
+                    </>
+                  ) : (
+                    <>
+                      <th className="text-left py-3 px-4 font-semibold text-gray-700">Año Fabricación</th>
+                      <th className="text-left py-3 px-4 font-semibold text-gray-700">1ra Intervención LEX</th>
+                    </>
+                  )}
                   <th className="text-left py-3 px-4 font-semibold text-gray-700">Estado</th>
                   <th className="text-right py-3 px-4 font-semibold text-gray-700">Acciones</th>
                 </tr>
@@ -205,6 +266,25 @@ const Defibrillators = () => {
                     <td className="py-3 px-4 text-gray-600">
                       {def.location || '-'}
                     </td>
+                    {activeTab === 'new' ? (
+                      <>
+                        <td className="py-3 px-4 text-gray-600">
+                          {def.installation_date ? new Date(def.installation_date).toLocaleDateString('es-AR') : '-'}
+                        </td>
+                        <td className="py-3 px-4 text-gray-600">
+                          {def.periodo_garantia || '-'}
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="py-3 px-4 text-gray-600">
+                          {def.año_fabricacion || '-'}
+                        </td>
+                        <td className="py-3 px-4 text-gray-600">
+                          {def.primera_intervencion_lex ? new Date(def.primera_intervencion_lex).toLocaleDateString('es-AR') : '-'}
+                        </td>
+                      </>
+                    )}
                     <td className="py-3 px-4">
                       <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
                         def.status === 'active' 
@@ -261,6 +341,7 @@ const Defibrillators = () => {
         <DefibrillatorForm
           defibrillator={editingDefibrillator}
           clients={clients}
+          equipmentType={equipmentType}
           onClose={handleFormClose}
           onSuccess={handleFormSuccess}
         />

@@ -41,6 +41,12 @@ const styles = StyleSheet.create({
     marginTop: 10,
     color: '#333',
   },
+  remitenteSection: {
+    marginBottom: 20,
+    padding: 10,
+    backgroundColor: '#e3f2fd',
+    border: '1 solid #2196f3',
+  },
   clientSection: {
     marginBottom: 20,
     padding: 10,
@@ -199,6 +205,35 @@ const RemitoPDF = ({ remito, client, logoBase64 }) => {
           <Text style={styles.remitoNumber}>REMITO N° {remito.remito_number}</Text>
         </View>
 
+        {/* Información del Remitente */}
+        <View style={styles.remitenteSection}>
+          <Text style={styles.sectionTitle}>DATOS DEL REMITENTE</Text>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Razón Social:</Text>
+            <Text style={styles.infoValue}>LEX SERVICIOS INTEGRALES S.R.L</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>CUIT:</Text>
+            <Text style={styles.infoValue}>30-71919692-2</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Dirección:</Text>
+            <Text style={styles.infoValue}>Urquiza 3817-Olavarria</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Email:</Text>
+            <Text style={styles.infoValue}>info@lexserviciosintegrales.com</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Teléfono:</Text>
+            <Text style={styles.infoValue}>2284-717419</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Web:</Text>
+            <Text style={styles.infoValue}>www.lexserviciosintegrales.com.ar</Text>
+          </View>
+        </View>
+
         {/* Información del Cliente */}
         <View style={styles.clientSection}>
           <Text style={styles.sectionTitle}>DATOS DEL CLIENTE</Text>
@@ -280,8 +315,8 @@ const RemitoPDF = ({ remito, client, logoBase64 }) => {
 
         {/* Footer */}
         <View style={styles.footer}>
-          <Text>Documento generado el {new Date().toLocaleDateString('es-AR')}</Text>
-          <Text>LEX - Espacios Cardioseguros | Sistema de Gestión</Text>
+          <Text style={{ fontWeight: 'bold', marginBottom: 5 }}>Documento no válido como factura</Text>
+          <Text style={{ fontWeight: 'bold' }}>LEX SERVICIOS INTEGRALES S.R.L</Text>
         </View>
       </Page>
     </Document>

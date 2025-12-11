@@ -5,6 +5,7 @@ import {
   Heart, 
   ClipboardCheck, 
   Package, 
+  ShoppingCart,
   FileText,
   Menu
 } from 'lucide-react'
@@ -18,6 +19,7 @@ const Sidebar = ({ isOpen, onToggle }) => {
     { path: '/defibrillators', icon: Heart, label: 'Desfibriladores' },
     { path: '/tests', icon: ClipboardCheck, label: 'Ensayos' },
     { path: '/inventory', icon: Package, label: 'Inventario' },
+    { path: '/purchases', icon: ShoppingCart, label: 'Compras' },
     { path: '/documents', icon: FileText, label: 'Documentos' },
   ]
 

@@ -22,13 +22,13 @@ const TestWizard = ({ defibrillators, templates, onClose, onSuccess }) => {
     
     // Paso 2: Instrumental
     instruments: [
-      { name: 'Analizador de Seguridad Eléctrica', brand: '', model: '', calibrated: false },
-      { name: 'Analizador de Desfibriladores', brand: '', model: '', calibrated: false },
-      { name: 'Multímetro Digital', brand: '', model: '', calibrated: false }
+      { name: 'Analizador de Seguridad Eléctrica', brand: '', model: '', serial_number: '', calibrated: false },
+      { name: 'Analizador de Desfibriladores', brand: '', model: '', serial_number: '', calibrated: false },
+      { name: 'Multímetro Digital', brand: '', model: '', serial_number: '', calibrated: false }
     ],
     
     // Paso 3: Motivo
-    maintenance_type: '', // 'preventive' o 'corrective'
+    maintenance_type: '', // 'preventive', 'corrective' o 'annual'
     
     // Paso 4-6: Resultados de ensayos (items predefinidos IRAM 62353)
     inspection_items: [...defaultInspectionItems],
@@ -188,10 +188,12 @@ const TestWizard = ({ defibrillators, templates, onClose, onSuccess }) => {
         await testsService.addItems(savedTest.id, allItems.map(item => ({
           item_key: item.item_key,
           item_label: item.item_label,
+          section: item.section || null, // Guardar la sección: 'inspection', 'safety', 'performance'
           checked: item.result === 'pass',
           result: item.result || null, // Guardar el resultado: 'pass', 'fail', 'na'
           value: item.value || '',
-          notes: item.notes || ''
+          notes: item.notes || '',
+          criteria: item.criteria || ''
         })))
       }
 
@@ -202,17 +204,30 @@ const TestWizard = ({ defibrillators, templates, onClose, onSuccess }) => {
         
         const fullTest = await testsService.getById(savedTest.id)
         
+        // Asegurar que los datos se pasen correctamente al PDF
+        // Usar formData directamente para evitar problemas con conversiones de JSONB
+        const testDataForPDF = {
+          ...fullTest,
+          institution: formData.institution,
+          sector: formData.sector,
+          // Usar formData.instruments directamente (viene del formulario con valores correctos)
+          // Asegurar que se use formData primero, luego fullTest como fallback
+          instruments: formData.instruments && formData.instruments.length > 0 ? formData.instruments : (fullTest.instruments || []),
+          maintenance_type: formData.maintenance_type || fullTest.maintenance_type || '',
+          spare_parts: formData.spare_parts || fullTest.spare_parts
+        }
+        
+        // Debug: verificar datos
+        console.log('Datos para PDF:', {
+          instruments: testDataForPDF.instruments,
+          maintenance_type: testDataForPDF.maintenance_type,
+          'instrumentos calibrados': testDataForPDF.instruments?.map(i => ({ name: i.name, calibrated: i.calibrated, type: typeof i.calibrated }))
+        })
+        
         const logoBase64 = await loadLogoAsBase64()
         const pdfUrl = await generateAndSavePDF(
           <TestPDF
-            test={{
-              ...fullTest,
-              institution: formData.institution,
-              sector: formData.sector,
-              instruments: formData.instruments,
-              maintenance_type: formData.maintenance_type,
-              spare_parts: formData.spare_parts
-            }}
+            test={testDataForPDF}
             defibrillator={defibrillatorData}
             client={clientData}
             template={selectedTemplate}
@@ -362,7 +377,7 @@ const TestWizard = ({ defibrillators, templates, onClose, onSuccess }) => {
             <h3 className="text-xl font-semibold mb-4">Instrumental Utilizado</h3>
             {formData.instruments.map((instrument, index) => (
               <div key={index} className="border border-gray-200 rounded-lg p-4">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Instrumento
@@ -396,6 +411,17 @@ const TestWizard = ({ defibrillators, templates, onClose, onSuccess }) => {
                       className="input-field"
                     />
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      N° Serie del Equipo
+                    </label>
+                    <input
+                      type="text"
+                      value={instrument.serial_number || ''}
+                      onChange={(e) => handleInstrumentChange(index, 'serial_number', e.target.value)}
+                      className="input-field"
+                    />
+                  </div>
                   <div className="flex items-end">
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input
@@ -414,7 +440,7 @@ const TestWizard = ({ defibrillators, templates, onClose, onSuccess }) => {
               type="button"
               onClick={() => setFormData(prev => ({
                 ...prev,
-                instruments: [...prev.instruments, { name: '', brand: '', model: '', calibrated: false }]
+                instruments: [...prev.instruments, { name: '', brand: '', model: '', serial_number: '', calibrated: false }]
               }))}
               className="btn-secondary text-sm"
             >
@@ -449,6 +475,17 @@ const TestWizard = ({ defibrillators, templates, onClose, onSuccess }) => {
                   className="w-5 h-5"
                 />
                 <span className="text-lg">Ensayos Post Mantenimiento Correctivo</span>
+              </label>
+              <label className="flex items-center gap-3 p-4 border-2 border-gray-200 rounded-lg cursor-pointer hover:border-primary-300 transition-colors">
+                <input
+                  type="radio"
+                  name="maintenance_type"
+                  value="annual"
+                  checked={formData.maintenance_type === 'annual'}
+                  onChange={handleChange}
+                  className="w-5 h-5"
+                />
+                <span className="text-lg">Verificación Técnica de Desfibrilador Anual</span>
               </label>
             </div>
           </div>

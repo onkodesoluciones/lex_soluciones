@@ -2,7 +2,7 @@ import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/render
 
 const styles = StyleSheet.create({
   page: {
-    padding: 30,
+    padding: 25,
     fontSize: 9,
     fontFamily: 'Helvetica',
   },
@@ -47,6 +47,26 @@ const styles = StyleSheet.create({
     marginTop: 10,
     marginBottom: 5,
   },
+  testSectionHeader: {
+    backgroundColor: '#0ea5e9',
+    color: 'white',
+    padding: 6,
+    fontSize: 10,
+    fontWeight: 'bold',
+    marginTop: 15,
+    marginBottom: 3,
+    textAlign: 'center',
+  },
+  testSectionHeaderFirst: {
+    backgroundColor: '#0ea5e9',
+    color: 'white',
+    padding: 6,
+    fontSize: 10,
+    fontWeight: 'bold',
+    marginTop: 5, // Menos espacio cuando está al inicio de nueva página
+    marginBottom: 3,
+    textAlign: 'center',
+  },
   table: {
     marginBottom: 10,
   },
@@ -88,7 +108,7 @@ const styles = StyleSheet.create({
     width: '70%',
   },
   checkboxSection: {
-    marginTop: 10,
+    marginTop: 0,
     marginBottom: 10,
   },
   checkboxHeader: {
@@ -105,13 +125,15 @@ const styles = StyleSheet.create({
   },
   checkboxColLabel: {
     width: '70%',
+    paddingRight: 5,
   },
   checkboxItem: {
     flexDirection: 'row',
     borderBottom: '1 solid #eee',
-    paddingVertical: 4,
+    paddingVertical: 6,
     paddingHorizontal: 5,
     fontSize: 8,
+    minHeight: 20,
   },
   checkbox: {
     width: 8,
@@ -121,6 +143,11 @@ const styles = StyleSheet.create({
   },
   checkboxChecked: {
     backgroundColor: '#333',
+  },
+  checkmark: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#000',
   },
   criteriaText: {
     fontSize: 7,
@@ -174,20 +201,38 @@ const TestPDF = ({ test, defibrillator, client, template, items, logoBase64 }) =
   }
 
   // Organizar items por sección
-  const inspectionItems = items?.filter(item => 
-    item.section === 'inspection' || 
-    (!item.section && !item.item_label?.toLowerCase().includes('seguridad') && !item.item_label?.toLowerCase().includes('performance'))
-  ) || []
+  // Primero intentar por campo section, luego por item_key, y finalmente por nombre
+  const inspectionItems = items?.filter(item => {
+    if (item.section === 'inspection') return true
+    if (item.item_key?.startsWith('inspection_')) return true
+    if (item.item_label?.toLowerCase().includes('seguridad') || item.item_label?.toLowerCase().includes('performance')) return false
+    // Si no tiene section ni item_key identificable, asumir que es inspection por defecto
+    return !item.section || item.section === 'inspection'
+  }) || []
   
-  const safetyItems = items?.filter(item => 
-    item.section === 'safety' || 
-    item.item_label?.toLowerCase().includes('seguridad')
-  ) || []
+  const safetyItems = items?.filter(item => {
+    if (item.section === 'safety') return true
+    if (item.item_key?.startsWith('safety_')) return true
+    if (item.item_label?.toLowerCase().includes('seguridad') || 
+        item.item_label?.toLowerCase().includes('resistencia') ||
+        item.item_label?.toLowerCase().includes('corriente') ||
+        item.item_label?.toLowerCase().includes('aislamiento')) return true
+    return false
+  }) || []
   
-  const performanceItems = items?.filter(item => 
-    item.section === 'performance' || 
-    item.item_label?.toLowerCase().includes('performance')
-  ) || []
+  const performanceItems = items?.filter(item => {
+    if (item.section === 'performance') return true
+    if (item.item_key?.startsWith('performance_')) return true
+    if (item.item_label?.toLowerCase().includes('performance') ||
+        item.item_label?.toLowerCase().includes('conmutación') ||
+        item.item_label?.toLowerCase().includes('registro de ecg') ||
+        item.item_label?.toLowerCase().includes('exactitud') ||
+        item.item_label?.toLowerCase().includes('alarmas') ||
+        item.item_label?.toLowerCase().includes('descarga') ||
+        item.item_label?.toLowerCase().includes('autonomía') ||
+        item.item_label?.toLowerCase().includes('sincronizado')) return true
+    return false
+  }) || []
 
   // Determinar resultado del item
   const getItemResult = (item) => {
@@ -197,9 +242,16 @@ const TestPDF = ({ test, defibrillator, client, template, items, logoBase64 }) =
     return null
   }
 
+  // Normalizar maintenance_type para comparación
+  const maintenanceType = String(test?.maintenance_type || '').toLowerCase().trim()
+  const isPreventive = maintenanceType === 'preventive' || maintenanceType === 'preventivo'
+  const isCorrective = maintenanceType === 'corrective' || maintenanceType === 'correctivo'
+  const isAnnual = maintenanceType === 'annual' || maintenanceType === 'anual'
+
   return (
     <Document>
-      <Page size="A4" style={styles.page}>
+      {/* Primera página: Header y datos generales */}
+      <Page size="A4" style={styles.page} wrap>
         {/* Header con Logo */}
         <View style={styles.header}>
           <View style={styles.logoContainer}>
@@ -261,21 +313,42 @@ const TestPDF = ({ test, defibrillator, client, template, items, logoBase64 }) =
             <Text style={styles.sectionHeader}>INSTRUMENTAL UTILIZADO</Text>
             <View style={styles.table}>
               <View style={[styles.tableRow, styles.tableHeader]}>
-                <Text style={[styles.tableCell, styles.col1]}>INSTRUMENTAL UTILIZADO</Text>
-                <Text style={[styles.tableCell, styles.col2]}>MARCA</Text>
-                <Text style={[styles.tableCell, styles.col3]}>MODELO</Text>
-                <Text style={[styles.tableCell, styles.col4]}>CALIBRACION</Text>
-              </View>
-              {test.instruments.map((instrument, index) => (
-                <View key={index} style={styles.tableRow}>
-                  <Text style={[styles.tableCell, styles.col1]}>{instrument.name || '-'}</Text>
-                  <Text style={[styles.tableCell, styles.col2]}>{instrument.brand || '-'}</Text>
-                  <Text style={[styles.tableCell, styles.col3]}>{instrument.model || '-'}</Text>
-                  <Text style={[styles.tableCell, styles.col4]}>
-                    {instrument.calibrated ? '✓' : ''}
-                  </Text>
+                <Text style={[styles.tableCell, { width: '20%' }]}>INSTRUMENTAL UTILIZADO</Text>
+                <Text style={[styles.tableCell, { width: '15%' }]}>MARCA</Text>
+                <Text style={[styles.tableCell, { width: '15%' }]}>MODELO</Text>
+                <Text style={[styles.tableCell, { width: '20%' }]}>N° SERIE DEL EQUIPO</Text>
+                <View style={[styles.tableCell, { width: '15%', alignItems: 'center' }]}>
+                  <Text>CALIBRACION</Text>
                 </View>
-              ))}
+              </View>
+              {test.instruments && test.instruments.map((instrument, index) => {
+                // Asegurar que calibrated sea un booleano (puede venir como string desde JSONB)
+                // Verificar múltiples formas en que puede venir el valor
+                const calibratedValue = instrument?.calibrated
+                const isCalibrated = calibratedValue === true || 
+                                     calibratedValue === 'true' || 
+                                     calibratedValue === 1 || 
+                                     calibratedValue === '1' ||
+                                     (typeof calibratedValue === 'string' && calibratedValue.toLowerCase() === 'true') ||
+                                     (calibratedValue !== null && calibratedValue !== undefined && calibratedValue !== false && calibratedValue !== 'false' && calibratedValue !== 0 && calibratedValue !== '0')
+                
+                const checkboxStyle = {
+                  ...styles.checkbox,
+                  ...(isCalibrated ? styles.checkboxChecked : {})
+                }
+                
+                return (
+                  <View key={index} style={styles.tableRow}>
+                    <Text style={[styles.tableCell, { width: '20%' }]}>{instrument?.name || '-'}</Text>
+                    <Text style={[styles.tableCell, { width: '15%' }]}>{instrument?.brand || '-'}</Text>
+                    <Text style={[styles.tableCell, { width: '15%' }]}>{instrument?.model || '-'}</Text>
+                    <Text style={[styles.tableCell, { width: '20%' }]}>{instrument?.serial_number || '-'}</Text>
+                    <View style={[styles.tableCell, { width: '15%', alignItems: 'center', justifyContent: 'center' }]}>
+                      <View style={checkboxStyle} />
+                    </View>
+                  </View>
+                )
+              })}
             </View>
           </>
         )}
@@ -285,172 +358,250 @@ const TestPDF = ({ test, defibrillator, client, template, items, logoBase64 }) =
           <>
             <Text style={styles.sectionHeader}>MOTIVO DE SOLICITUD</Text>
             <View style={styles.infoBox}>
-              <View style={styles.infoRow}>
+              <View style={[styles.infoRow, { alignItems: 'center' }]}>
+                <View style={{ marginRight: 8 }}>
+                  <View style={{
+                    ...styles.checkbox,
+                    ...(isPreventive ? styles.checkboxChecked : {})
+                  }} />
+                </View>
                 <Text style={styles.infoLabel}>
-                  {test.maintenance_type === 'preventive' ? '✓' : '☐'} Ensayos Post Mantenimiento Preventivo
+                  Ensayos Post Mantenimiento Preventivo
                 </Text>
               </View>
-              <View style={styles.infoRow}>
+              <View style={[styles.infoRow, { alignItems: 'center' }]}>
+                <View style={{ marginRight: 8 }}>
+                  <View style={{
+                    ...styles.checkbox,
+                    ...(isCorrective ? styles.checkboxChecked : {})
+                  }} />
+                </View>
                 <Text style={styles.infoLabel}>
-                  {test.maintenance_type === 'corrective' ? '✓' : '☐'} Ensayos Post Mantenimiento Correctivo
+                  Ensayos Post Mantenimiento Correctivo
+                </Text>
+              </View>
+              <View style={[styles.infoRow, { alignItems: 'center' }]}>
+                <View style={{ marginRight: 8 }}>
+                  <View style={{
+                    ...styles.checkbox,
+                    ...(isAnnual ? styles.checkboxChecked : {})
+                  }} />
+                </View>
+                <Text style={styles.infoLabel}>
+                  Verificación Técnica de Desfibrilador Anual
                 </Text>
               </View>
             </View>
           </>
         )}
 
-        {/* Ensayo de Inspección - IRAM 62353 - 5.2 */}
-        {inspectionItems.length > 0 && (
-          <>
-            <Text style={styles.sectionHeader}>ENSAYO DE INSPECCION - IRAM 62353 - 5.2</Text>
-            <View style={styles.checkboxSection}>
-              <View style={styles.checkboxHeader}>
-                <Text style={styles.checkboxCol}>PASO</Text>
-                <Text style={styles.checkboxCol}>FALLO</Text>
-                <Text style={styles.checkboxCol}>N/A</Text>
-                <Text style={styles.checkboxColLabel}>ITEM</Text>
-              </View>
-              {inspectionItems.map((item, index) => {
-                const result = getItemResult(item)
-                return (
-                  <View key={index} style={styles.checkboxItem}>
-                    <View style={styles.checkboxCol}>
-                      <View style={[styles.checkbox, result === 'pass' && styles.checkboxChecked]} />
-                    </View>
-                    <View style={styles.checkboxCol}>
-                      <View style={[styles.checkbox, result === 'fail' && styles.checkboxChecked]} />
-                    </View>
-                    <View style={styles.checkboxCol}>
-                      <View style={[styles.checkbox, result === 'na' && styles.checkboxChecked]} />
-                    </View>
-                    <View style={styles.checkboxColLabel}>
-                      <Text>{item.item_label}</Text>
-                      {item.value && (
-                        <Text style={styles.valueText}>Valor: {item.value}</Text>
-                      )}
-                      {item.notes && (
-                        <Text style={styles.criteriaText}>Nota: {item.notes}</Text>
-                      )}
-                    </View>
-                  </View>
-                )
-              })}
-            </View>
-          </>
-        )}
-
-        {/* Test de Seguridad Eléctrica - IRAM 62353 - 5.3 */}
-        {safetyItems.length > 0 && (
-          <>
-            <Text style={styles.sectionHeader}>TEST DE SEGURIDAD ELECTRICA - IRAM 62353 - 5.3</Text>
-            <View style={styles.checkboxSection}>
-              <View style={styles.checkboxHeader}>
-                <Text style={styles.checkboxCol}>PASO</Text>
-                <Text style={styles.checkboxCol}>FALLO</Text>
-                <Text style={styles.checkboxCol}>N/A</Text>
-                <Text style={styles.checkboxColLabel}>ITEM / CRITERIO</Text>
-              </View>
-              {safetyItems.map((item, index) => {
-                const result = getItemResult(item)
-                return (
-                  <View key={index} style={styles.checkboxItem}>
-                    <View style={styles.checkboxCol}>
-                      <View style={[styles.checkbox, result === 'pass' && styles.checkboxChecked]} />
-                    </View>
-                    <View style={styles.checkboxCol}>
-                      <View style={[styles.checkbox, result === 'fail' && styles.checkboxChecked]} />
-                    </View>
-                    <View style={styles.checkboxCol}>
-                      <View style={[styles.checkbox, result === 'na' && styles.checkboxChecked]} />
-                    </View>
-                    <View style={styles.checkboxColLabel}>
-                      <Text>{item.item_label}</Text>
-                      {item.criteria && (
-                        <Text style={styles.criteriaText}>Criterio: {item.criteria}</Text>
-                      )}
-                      {item.value && (
-                        <Text style={styles.valueText}>Valor medido: {item.value}</Text>
-                      )}
-                      {item.notes && (
-                        <Text style={styles.criteriaText}>Nota: {item.notes}</Text>
-                      )}
-                    </View>
-                  </View>
-                )
-              })}
-            </View>
-          </>
-        )}
-
-        {/* Ensayo de Performance - IRAM 62353 - 5.4 */}
-        {performanceItems.length > 0 && (
-          <>
-            <Text style={styles.sectionHeader}>ENSAYO DE PERFORMANCE - IRAM 62353 - 5.4</Text>
-            <View style={styles.checkboxSection}>
-              <View style={styles.checkboxHeader}>
-                <Text style={styles.checkboxCol}>PASO</Text>
-                <Text style={styles.checkboxCol}>FALLO</Text>
-                <Text style={styles.checkboxCol}>N/A</Text>
-                <Text style={styles.checkboxColLabel}>ITEM</Text>
-              </View>
-              {performanceItems.map((item, index) => {
-                const result = getItemResult(item)
-                return (
-                  <View key={index} style={styles.checkboxItem}>
-                    <View style={styles.checkboxCol}>
-                      <View style={[styles.checkbox, result === 'pass' && styles.checkboxChecked]} />
-                    </View>
-                    <View style={styles.checkboxCol}>
-                      <View style={[styles.checkbox, result === 'fail' && styles.checkboxChecked]} />
-                    </View>
-                    <View style={styles.checkboxCol}>
-                      <View style={[styles.checkbox, result === 'na' && styles.checkboxChecked]} />
-                    </View>
-                    <View style={styles.checkboxColLabel}>
-                      <Text>{item.item_label}</Text>
-                      {item.criteria && (
-                        <Text style={styles.criteriaText}>Criterio: {item.criteria}</Text>
-                      )}
-                      {item.value && (
-                        <Text style={styles.valueText}>Valor: {item.value}</Text>
-                      )}
-                      {item.notes && (
-                        <Text style={styles.criteriaText}>Nota: {item.notes}</Text>
-                      )}
-                    </View>
-                  </View>
-                )
-              })}
-            </View>
-          </>
-        )}
-
-        {/* Repuestos */}
-        {test.spare_parts && (
-          <>
-            <Text style={styles.sectionHeader}>REPUESTOS</Text>
-            <View style={styles.sparePartsBox}>
-              <Text style={{ fontSize: 8 }}>{test.spare_parts}</Text>
-            </View>
-          </>
-        )}
-
-        {/* Observaciones */}
-        {test.observations && (
-          <>
-            <Text style={styles.sectionHeader}>OBSERVACIONES</Text>
-            <View style={styles.notesBox}>
-              <Text style={{ fontSize: 8 }}>{test.observations}</Text>
-            </View>
-          </>
-        )}
-
-        {/* Footer */}
-        <View style={styles.footer}>
-          <Text>Documento generado el {new Date().toLocaleDateString('es-AR')}</Text>
-          <Text>LEX - Espacios Cardioseguros | Sistema de Gestión</Text>
-        </View>
       </Page>
+
+      {/* Página 2: Ensayo de Inspección - IRAM 62353 - 5.2 */}
+      {inspectionItems.length > 0 && (
+        <Page size="A4" style={styles.page} wrap>
+          <View style={styles.header}>
+            <View style={styles.logoContainer}>
+              {logoBase64 ? (
+                <Image src={logoBase64} style={styles.logoImage} />
+              ) : (
+                <>
+                  <Text style={styles.logoText}>LEX</Text>
+                  <Text style={styles.logoSubtitle}>Servicios integrales para instituciones sanitarias</Text>
+                </>
+              )}
+            </View>
+          </View>
+          <Text style={[styles.testSectionHeader, { marginTop: 10 }]}>ENSAYO DE INSPECCION - IRAM 62353 - 5.2</Text>
+          <View style={styles.checkboxSection}>
+            <View style={styles.checkboxHeader}>
+              <Text style={styles.checkboxCol}>PASO</Text>
+              <Text style={styles.checkboxCol}>FALLO</Text>
+              <Text style={styles.checkboxCol}>N/A</Text>
+              <Text style={styles.checkboxColLabel}>ITEM</Text>
+            </View>
+            {inspectionItems.map((item, index) => {
+              const result = getItemResult(item)
+              return (
+                <View key={index} style={styles.checkboxItem}>
+                  <View style={styles.checkboxCol}>
+                    <View style={[styles.checkbox, result === 'pass' && styles.checkboxChecked]} />
+                  </View>
+                  <View style={styles.checkboxCol}>
+                    <View style={[styles.checkbox, result === 'fail' && styles.checkboxChecked]} />
+                  </View>
+                  <View style={styles.checkboxCol}>
+                    <View style={[styles.checkbox, result === 'na' && styles.checkboxChecked]} />
+                  </View>
+                  <View style={styles.checkboxColLabel}>
+                    <Text style={{ flexWrap: 'wrap' }}>{item.item_label}</Text>
+                    {item.value && (
+                      <Text style={styles.valueText}>Valor: {item.value}</Text>
+                    )}
+                    {item.notes && (
+                      <Text style={styles.criteriaText}>Nota: {item.notes}</Text>
+                    )}
+                  </View>
+                </View>
+              )
+            })}
+          </View>
+        </Page>
+      )}
+
+      {/* Página 3: Test de Seguridad Eléctrica - IRAM 62353 - 5.3 */}
+      {safetyItems.length > 0 && (
+        <Page size="A4" style={styles.page} wrap>
+          <View style={styles.header}>
+            <View style={styles.logoContainer}>
+              {logoBase64 ? (
+                <Image src={logoBase64} style={styles.logoImage} />
+              ) : (
+                <>
+                  <Text style={styles.logoText}>LEX</Text>
+                  <Text style={styles.logoSubtitle}>Servicios integrales para instituciones sanitarias</Text>
+                </>
+              )}
+            </View>
+          </View>
+          <Text style={[styles.testSectionHeader, { marginTop: 10 }]}>TEST DE SEGURIDAD ELECTRICA - IRAM 62353 - 5.3</Text>
+          <View style={styles.checkboxSection}>
+            <View style={styles.checkboxHeader}>
+              <Text style={styles.checkboxCol}>PASO</Text>
+              <Text style={styles.checkboxCol}>FALLO</Text>
+              <Text style={styles.checkboxCol}>N/A</Text>
+              <Text style={styles.checkboxColLabel}>ITEM / CRITERIO</Text>
+            </View>
+            {safetyItems.map((item, index) => {
+              const result = getItemResult(item)
+              return (
+                <View key={index} style={styles.checkboxItem}>
+                  <View style={styles.checkboxCol}>
+                    <View style={[styles.checkbox, result === 'pass' && styles.checkboxChecked]} />
+                  </View>
+                  <View style={styles.checkboxCol}>
+                    <View style={[styles.checkbox, result === 'fail' && styles.checkboxChecked]} />
+                  </View>
+                  <View style={styles.checkboxCol}>
+                    <View style={[styles.checkbox, result === 'na' && styles.checkboxChecked]} />
+                  </View>
+                  <View style={styles.checkboxColLabel}>
+                    <Text style={{ flexWrap: 'wrap' }}>{item.item_label}</Text>
+                    {item.criteria && (
+                      <Text style={styles.criteriaText}>Criterio: {item.criteria}</Text>
+                    )}
+                    {item.value && (
+                      <Text style={styles.valueText}>Valor medido: {item.value}</Text>
+                    )}
+                    {item.notes && (
+                      <Text style={styles.criteriaText}>Nota: {item.notes}</Text>
+                    )}
+                  </View>
+                </View>
+              )
+            })}
+          </View>
+        </Page>
+      )}
+
+      {/* Página 4: Ensayo de Performance - IRAM 62353 - 5.4 */}
+      {performanceItems.length > 0 && (
+        <Page size="A4" style={styles.page} wrap>
+          <View style={styles.header}>
+            <View style={styles.logoContainer}>
+              {logoBase64 ? (
+                <Image src={logoBase64} style={styles.logoImage} />
+              ) : (
+                <>
+                  <Text style={styles.logoText}>LEX</Text>
+                  <Text style={styles.logoSubtitle}>Servicios integrales para instituciones sanitarias</Text>
+                </>
+              )}
+            </View>
+          </View>
+          <Text style={[styles.testSectionHeader, { marginTop: 10 }]}>ENSAYO DE PERFORMANCE - IRAM 62353 - 5.4</Text>
+          <View style={styles.checkboxSection}>
+            <View style={styles.checkboxHeader}>
+              <Text style={styles.checkboxCol}>PASO</Text>
+              <Text style={styles.checkboxCol}>FALLO</Text>
+              <Text style={styles.checkboxCol}>N/A</Text>
+              <Text style={styles.checkboxColLabel}>ITEM</Text>
+            </View>
+            {performanceItems.map((item, index) => {
+              const result = getItemResult(item)
+              return (
+                <View key={index} style={styles.checkboxItem}>
+                  <View style={styles.checkboxCol}>
+                    <View style={[styles.checkbox, result === 'pass' && styles.checkboxChecked]} />
+                  </View>
+                  <View style={styles.checkboxCol}>
+                    <View style={[styles.checkbox, result === 'fail' && styles.checkboxChecked]} />
+                  </View>
+                  <View style={styles.checkboxCol}>
+                    <View style={[styles.checkbox, result === 'na' && styles.checkboxChecked]} />
+                  </View>
+                  <View style={styles.checkboxColLabel}>
+                    <Text style={{ flexWrap: 'wrap' }}>{item.item_label}</Text>
+                    {item.criteria && (
+                      <Text style={styles.criteriaText}>Criterio: {item.criteria}</Text>
+                    )}
+                    {item.value && (
+                      <Text style={styles.valueText}>Valor: {item.value}</Text>
+                    )}
+                    {item.notes && (
+                      <Text style={styles.criteriaText}>Nota: {item.notes}</Text>
+                    )}
+                  </View>
+                </View>
+              )
+            })}
+          </View>
+        </Page>
+      )}
+
+      {/* Página final: Repuestos y Observaciones */}
+      {(test.spare_parts || test.observations) && (
+        <Page size="A4" style={styles.page} wrap>
+          <View style={styles.header}>
+            <View style={styles.logoContainer}>
+              {logoBase64 ? (
+                <Image src={logoBase64} style={styles.logoImage} />
+              ) : (
+                <>
+                  <Text style={styles.logoText}>LEX</Text>
+                  <Text style={styles.logoSubtitle}>Servicios integrales para instituciones sanitarias</Text>
+                </>
+              )}
+            </View>
+          </View>
+
+          {/* Repuestos */}
+          {test.spare_parts && (
+            <>
+              <Text style={styles.sectionHeader}>REPUESTOS</Text>
+              <View style={styles.notesBox}>
+                <Text style={{ fontSize: 8 }}>{test.spare_parts}</Text>
+              </View>
+            </>
+          )}
+
+          {/* Observaciones */}
+          {test.observations && (
+            <>
+              <Text style={styles.sectionHeader}>OBSERVACIONES</Text>
+              <View style={styles.notesBox}>
+                <Text style={{ fontSize: 8 }}>{test.observations}</Text>
+              </View>
+            </>
+          )}
+
+          {/* Footer */}
+          <View style={styles.footer}>
+            <Text>Documento generado el {new Date().toLocaleDateString('es-AR')}</Text>
+            <Text>LEX - Espacios Cardioseguros | Sistema de Gestión</Text>
+          </View>
+        </Page>
+      )}
     </Document>
   )
 }

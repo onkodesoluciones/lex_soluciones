@@ -11,7 +11,6 @@ const InventoryForm = ({ item, onClose, onSuccess }) => {
     current_stock: 0,
     min_stock: 0,
     max_stock: '',
-    unit_cost: '',
     supplier: '',
     notes: ''
   })
@@ -28,7 +27,6 @@ const InventoryForm = ({ item, onClose, onSuccess }) => {
         current_stock: item.current_stock || 0,
         min_stock: item.min_stock || 0,
         max_stock: item.max_stock || '',
-        unit_cost: item.unit_cost || '',
         supplier: item.supplier || '',
         notes: item.notes || ''
       })
@@ -58,8 +56,7 @@ const InventoryForm = ({ item, onClose, onSuccess }) => {
         ...formData,
         current_stock: parseFloat(formData.current_stock) || 0,
         min_stock: parseFloat(formData.min_stock) || 0,
-        max_stock: formData.max_stock ? parseFloat(formData.max_stock) : null,
-        unit_cost: formData.unit_cost ? parseFloat(formData.unit_cost) : null
+        max_stock: formData.max_stock ? parseFloat(formData.max_stock) : null
       }
 
       if (item) {
@@ -201,22 +198,6 @@ const InventoryForm = ({ item, onClose, onSuccess }) => {
                 min="0"
                 step="0.01"
                 className="input-field"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Costo Unitario
-              </label>
-              <input
-                type="number"
-                name="unit_cost"
-                value={formData.unit_cost}
-                onChange={handleChange}
-                min="0"
-                step="0.01"
-                className="input-field"
-                placeholder="0.00"
               />
             </div>
 

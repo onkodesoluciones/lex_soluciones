@@ -8,6 +8,7 @@ import Clients from './pages/Clients'
 import Defibrillators from './pages/Defibrillators'
 import Tests from './pages/Tests'
 import Inventory from './pages/Inventory'
+import Purchases from './pages/Purchases'
 import Documents from './pages/Documents'
 
 function App() {
@@ -27,6 +28,7 @@ function App() {
                     <Route path="/defibrillators" element={<Defibrillators />} />
                     <Route path="/tests" element={<Tests />} />
                     <Route path="/inventory" element={<Inventory />} />
+                    <Route path="/purchases" element={<Purchases />} />
                     <Route path="/documents" element={<Documents />} />
                   </Routes>
                 </Layout>

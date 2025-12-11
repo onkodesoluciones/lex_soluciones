@@ -184,7 +184,6 @@ const Inventory = () => {
                   <th className="text-right py-3 px-4 font-semibold text-gray-700">Stock Actual</th>
                   <th className="text-right py-3 px-4 font-semibold text-gray-700">Stock Mín.</th>
                   <th className="text-right py-3 px-4 font-semibold text-gray-700">Unidad</th>
-                  <th className="text-right py-3 px-4 font-semibold text-gray-700">Costo Unit.</th>
                   <th className="text-right py-3 px-4 font-semibold text-gray-700">Acciones</th>
                 </tr>
               </thead>
@@ -225,9 +224,6 @@ const Inventory = () => {
                       </td>
                       <td className="py-3 px-4 text-right text-gray-600">
                         {item.unit}
-                      </td>
-                      <td className="py-3 px-4 text-right text-gray-600">
-                        {item.unit_cost ? `$${item.unit_cost.toFixed(2)}` : '-'}
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex justify-end gap-2">
