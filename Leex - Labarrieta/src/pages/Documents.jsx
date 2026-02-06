@@ -15,6 +15,30 @@ const Documents = () => {
   const [editingRemito, setEditingRemito] = useState(null)
   const [editingPresupuesto, setEditingPresupuesto] = useState(null)
 
+  // Función para formatear fechas sin problemas de zona horaria
+  const formatDate = (dateString) => {
+    if (!dateString) return '-'
+    // Si la fecha viene en formato YYYY-MM-DD, parsearla directamente sin zona horaria
+    if (typeof dateString === 'string' && dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      const [year, month, day] = dateString.split('-')
+      const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
+      return date.toLocaleDateString('es-AR', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      })
+    }
+    // Para otros formatos, usar el método normal pero ajustar a hora local
+    const date = new Date(dateString)
+    // Ajustar a hora local para evitar problemas de zona horaria
+    const localDate = new Date(date.getTime() - (date.getTimezoneOffset() * 60000))
+    return localDate.toLocaleDateString('es-AR', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    })
+  }
+
   useEffect(() => {
     loadDocuments()
   }, [])
@@ -150,7 +174,7 @@ const Documents = () => {
                         <div className="font-medium text-gray-900">{remito.remito_number}</div>
                       </td>
                       <td className="py-3 px-4 text-gray-600">
-                        {new Date(remito.date).toLocaleDateString('es-AR')}
+                        {formatDate(remito.date)}
                       </td>
                       <td className="py-3 px-4 text-gray-600">
                         {remito.clients?.name || '-'}
@@ -240,7 +264,7 @@ const Documents = () => {
                         <div className="font-medium text-gray-900">{presupuesto.presupuesto_number}</div>
                       </td>
                       <td className="py-3 px-4 text-gray-600">
-                        {new Date(presupuesto.date).toLocaleDateString('es-AR')}
+                        {formatDate(presupuesto.date)}
                       </td>
                       <td className="py-3 px-4 text-gray-600">
                         {presupuesto.clients?.name || '-'}

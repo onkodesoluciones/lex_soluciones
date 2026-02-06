@@ -8,11 +8,20 @@ import { formatCurrency } from '../../utils/formatCurrency'
 import { X, Plus, Trash2 } from 'lucide-react'
 
 const RemitoForm = ({ remito, onClose, onSuccess }) => {
+  // Función helper para obtener la fecha local en formato YYYY-MM-DD
+  const getLocalDateString = () => {
+    const now = new Date()
+    const year = now.getFullYear()
+    const month = String(now.getMonth() + 1).padStart(2, '0')
+    const day = String(now.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+
   const [clients, setClients] = useState([])
   const [formData, setFormData] = useState({
     client_id: '',
     remito_number: '',
-    date: new Date().toISOString().split('T')[0],
+    date: getLocalDateString(),
     items: [],
     notes: ''
   })
@@ -30,10 +39,21 @@ const RemitoForm = ({ remito, onClose, onSuccess }) => {
     if (!remito) {
       generateRemitoNumber()
     } else {
+      // Si remito.date viene como string, asegurarse de que esté en formato YYYY-MM-DD
+      let dateValue = remito.date
+      if (dateValue && typeof dateValue === 'string') {
+        // Si viene como fecha completa con hora, extraer solo la fecha
+        if (dateValue.includes('T')) {
+          dateValue = dateValue.split('T')[0]
+        }
+      } else if (!dateValue) {
+        dateValue = getLocalDateString()
+      }
+
       setFormData({
         client_id: remito.client_id || '',
         remito_number: remito.remito_number || '',
-        date: remito.date || new Date().toISOString().split('T')[0],
+        date: dateValue,
         items: remito.items || [],
         notes: remito.notes || ''
       })
@@ -124,8 +144,29 @@ const RemitoForm = ({ remito, onClose, onSuccess }) => {
       setLoading(true)
       const { subtotal, tax, total } = calculateTotals()
 
+      // Asegurarse de que la fecha se envíe como string YYYY-MM-DD sin conversiones
+      let dateToSend = formData.date
+      if (dateToSend && typeof dateToSend === 'string') {
+        // Si viene como fecha completa con hora, extraer solo la fecha
+        if (dateToSend.includes('T')) {
+          dateToSend = dateToSend.split('T')[0]
+        }
+        // Asegurarse de que esté en formato YYYY-MM-DD
+        if (!dateToSend.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          // Si viene en otro formato, parsearlo usando fecha local
+          const dateObj = new Date(dateToSend)
+          if (!isNaN(dateObj.getTime())) {
+            const year = dateObj.getFullYear()
+            const month = String(dateObj.getMonth() + 1).padStart(2, '0')
+            const day = String(dateObj.getDate()).padStart(2, '0')
+            dateToSend = `${year}-${month}-${day}`
+          }
+        }
+      }
+
       const submitData = {
         ...formData,
+        date: dateToSend,
         items: formData.items,
         subtotal,
         tax,

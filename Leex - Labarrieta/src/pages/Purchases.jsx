@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { purchasesService } from '../services/purchasesService'
-import { ShoppingCart, Plus, Search, Edit, Trash2, DollarSign, Package, Calendar } from 'lucide-react'
+import { ShoppingCart, Plus, Search, Edit, Trash2, DollarSign, Calendar } from 'lucide-react'
 import PurchaseForm from '../components/Purchases/PurchaseForm'
 import { formatCurrency } from '../utils/formatCurrency'
 
@@ -124,7 +124,7 @@ const Purchases = () => {
 
       {/* Estadísticas */}
       {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           <div className="card">
             <div className="flex items-center gap-3">
               <div className="p-3 bg-blue-100 rounded-lg">
@@ -146,17 +146,6 @@ const Purchases = () => {
                 <p className="text-2xl font-bold text-gray-900">
                   {formatCurrency(stats.totalAmount)}
                 </p>
-              </div>
-            </div>
-          </div>
-          <div className="card">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-purple-100 rounded-lg">
-                <Package className="w-6 h-6 text-purple-600" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Cantidad Total</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.totalQuantity.toFixed(2)}</p>
               </div>
             </div>
           </div>

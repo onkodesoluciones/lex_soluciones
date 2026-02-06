@@ -1,5 +1,4 @@
 import { supabase } from '../config/supabase'
-import { inventoryService } from './inventoryService'
 
 export const purchasesService = {
   // Obtener todas las compras
@@ -55,7 +54,7 @@ export const purchasesService = {
     return data
   },
 
-  // Crear una nueva compra y actualizar stock automáticamente
+  // Crear una nueva compra (sin actualizar stock automáticamente)
   async create(purchaseData) {
     // Calcular precio total si no viene
     const totalPrice = purchaseData.total_price || 
@@ -66,7 +65,7 @@ export const purchasesService = {
       total_price: totalPrice
     }
 
-    // Insertar la compra
+    // Insertar la compra (sin actualizar stock)
     const { data: purchase, error: purchaseError } = await supabase
       .from('purchases')
       .insert([purchaseToInsert])
@@ -83,25 +82,8 @@ export const purchasesService = {
 
     if (purchaseError) throw purchaseError
 
-    // Obtener el item actual del inventario
-    const currentItem = await inventoryService.getById(purchaseData.inventory_id)
-    
-    // Actualizar el stock (sumar la cantidad comprada)
-    const newStock = (currentItem.current_stock || 0) + parseFloat(purchaseData.quantity)
-    
-    await inventoryService.update(purchaseData.inventory_id, {
-      current_stock: newStock
-    })
-
-    // Registrar el movimiento de stock automáticamente
-    await inventoryService.addMovement({
-      inventory_id: purchaseData.inventory_id,
-      movement_type: 'entry',
-      quantity: parseFloat(purchaseData.quantity),
-      reason: `Compra registrada - ${purchaseData.supplier || 'Sin proveedor'}`,
-      reference_type: 'purchase',
-      reference_id: purchase.id
-    })
+    // NOTA: El stock NO se actualiza automáticamente
+    // El usuario debe ajustar el stock manualmente desde el inventario si lo desea
 
     return purchase
   },
@@ -140,34 +122,18 @@ export const purchasesService = {
     return data
   },
 
-  // Eliminar una compra y revertir el stock
+  // Eliminar una compra (sin revertir stock automáticamente)
   async delete(id) {
-    // Obtener la compra antes de eliminarla
-    const { data: purchase, error: fetchError } = await supabase
-      .from('purchases')
-      .select('*')
-      .eq('id', id)
-      .single()
-
-    if (fetchError) throw fetchError
-
-    // Obtener el item actual del inventario
-    const currentItem = await inventoryService.getById(purchase.inventory_id)
-    
-    // Revertir el stock (restar la cantidad comprada)
-    const newStock = Math.max(0, (currentItem.current_stock || 0) - parseFloat(purchase.quantity))
-    
-    await inventoryService.update(purchase.inventory_id, {
-      current_stock: newStock
-    })
-
-    // Eliminar la compra
+    // Eliminar la compra (sin afectar el stock)
     const { error } = await supabase
       .from('purchases')
       .delete()
       .eq('id', id)
 
     if (error) throw error
+    
+    // NOTA: El stock NO se revierte automáticamente
+    // El usuario debe ajustar el stock manualmente desde el inventario si lo desea
   },
 
   // Obtener estadísticas de compras

@@ -118,14 +118,7 @@ const Tests = () => {
             className="btn-primary flex items-center gap-2"
           >
             <Plus className="w-5 h-5" />
-            Nuevo Ensayo (Paso a Paso)
-          </button>
-          <button 
-            onClick={handleCreate}
-            className="btn-secondary flex items-center gap-2"
-          >
-            <Plus className="w-5 h-5" />
-            Nuevo Ensayo (Rápido)
+            Nuevo Ensayo
           </button>
         </div>
       </div>

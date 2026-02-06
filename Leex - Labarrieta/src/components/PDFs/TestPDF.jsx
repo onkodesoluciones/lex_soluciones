@@ -192,45 +192,80 @@ const styles = StyleSheet.create({
 const TestPDF = ({ test, defibrillator, client, template, items, logoBase64 }) => {
   const formatDate = (dateString) => {
     if (!dateString) return '-'
+    // Si la fecha viene en formato YYYY-MM-DD, parsearla directamente sin zona horaria
+    if (typeof dateString === 'string' && dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      const [year, month, day] = dateString.split('-')
+      const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
+      return date.toLocaleDateString('es-AR', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      })
+    }
+    // Para otros formatos, usar el método normal pero ajustar a hora local
     const date = new Date(dateString)
-    return date.toLocaleDateString('es-AR', {
+    // Ajustar a hora local para evitar problemas de zona horaria
+    const localDate = new Date(date.getTime() - (date.getTimezoneOffset() * 60000))
+    return localDate.toLocaleDateString('es-AR', {
       year: 'numeric',
       month: '2-digit',
       day: '2-digit'
     })
   }
 
+  // Organizar items por sección dinámicamente
+  // Obtener todas las secciones únicas de los items
+  const allSections = new Set()
+  items?.forEach(item => {
+    if (item.section) {
+      allSections.add(item.section)
+    }
+  })
+  
+  // Ordenar secciones numéricamente
+  const sortedSections = Array.from(allSections).sort((a, b) => {
+    // Si ambas son numéricas (5.x), ordenar numéricamente
+    if (a.match(/^5\.\d+$/) && b.match(/^5\.\d+$/)) {
+      return parseFloat(a) - parseFloat(b)
+    }
+    // Si solo una es numérica, la numérica va primero
+    if (a.match(/^5\.\d+$/)) return -1
+    if (b.match(/^5\.\d+$/)) return 1
+    // Ambas son no numéricas, orden alfabético
+    return a.localeCompare(b)
+  })
+  
   // Organizar items por sección
-  // Primero intentar por campo section, luego por item_key, y finalmente por nombre
-  const inspectionItems = items?.filter(item => {
+  const itemsBySection = {}
+  sortedSections.forEach(section => {
+    itemsBySection[section] = items?.filter(item => item.section === section) || []
+  })
+  
+  // Obtener títulos de secciones desde la plantilla
+  const getSectionTitle = (section) => {
+    if (template?.sections && template.sections[section] && template.sections[section].title) {
+      return template.sections[section].title
+    }
+    // Si no hay título, usar solo el número de sección
+    return `Sección ${section}`
+  }
+  
+  // Compatibilidad hacia atrás: mantener variables para secciones específicas si existen
+  const inspectionItems = itemsBySection['5.2'] || items?.filter(item => {
     if (item.section === 'inspection') return true
     if (item.item_key?.startsWith('inspection_')) return true
-    if (item.item_label?.toLowerCase().includes('seguridad') || item.item_label?.toLowerCase().includes('performance')) return false
-    // Si no tiene section ni item_key identificable, asumir que es inspection por defecto
     return !item.section || item.section === 'inspection'
   }) || []
   
-  const safetyItems = items?.filter(item => {
+  const safetyItems = itemsBySection['5.3'] || items?.filter(item => {
     if (item.section === 'safety') return true
     if (item.item_key?.startsWith('safety_')) return true
-    if (item.item_label?.toLowerCase().includes('seguridad') || 
-        item.item_label?.toLowerCase().includes('resistencia') ||
-        item.item_label?.toLowerCase().includes('corriente') ||
-        item.item_label?.toLowerCase().includes('aislamiento')) return true
     return false
   }) || []
   
-  const performanceItems = items?.filter(item => {
+  const performanceItems = itemsBySection['5.4'] || items?.filter(item => {
     if (item.section === 'performance') return true
     if (item.item_key?.startsWith('performance_')) return true
-    if (item.item_label?.toLowerCase().includes('performance') ||
-        item.item_label?.toLowerCase().includes('conmutación') ||
-        item.item_label?.toLowerCase().includes('registro de ecg') ||
-        item.item_label?.toLowerCase().includes('exactitud') ||
-        item.item_label?.toLowerCase().includes('alarmas') ||
-        item.item_label?.toLowerCase().includes('descarga') ||
-        item.item_label?.toLowerCase().includes('autonomía') ||
-        item.item_label?.toLowerCase().includes('sincronizado')) return true
     return false
   }) || []
 
@@ -397,167 +432,70 @@ const TestPDF = ({ test, defibrillator, client, template, items, logoBase64 }) =
 
       </Page>
 
-      {/* Página 2: Ensayo de Inspección - IRAM 62353 - 5.2 */}
-      {inspectionItems.length > 0 && (
-        <Page size="A4" style={styles.page} wrap>
-          <View style={styles.header}>
-            <View style={styles.logoContainer}>
-              {logoBase64 ? (
-                <Image src={logoBase64} style={styles.logoImage} />
-              ) : (
-                <>
-                  <Text style={styles.logoText}>LEX</Text>
-                  <Text style={styles.logoSubtitle}>Servicios integrales para instituciones sanitarias</Text>
-                </>
-              )}
+      {/* Páginas dinámicas para cada sección */}
+      {sortedSections.map((section, sectionIndex) => {
+        const sectionItems = itemsBySection[section] || []
+        if (sectionItems.length === 0) return null
+        
+        const sectionTitle = getSectionTitle(section)
+        // Determinar si la sección tiene criterios (para mostrar "ITEM / CRITERIO" en el header)
+        const hasCriteria = sectionItems.some(item => item.criteria)
+        
+        return (
+          <Page key={section} size="A4" style={styles.page} wrap>
+            <View style={styles.header}>
+              <View style={styles.logoContainer}>
+                {logoBase64 ? (
+                  <Image src={logoBase64} style={styles.logoImage} />
+                ) : (
+                  <>
+                    <Text style={styles.logoText}>LEX</Text>
+                    <Text style={styles.logoSubtitle}>Servicios integrales para instituciones sanitarias</Text>
+                  </>
+                )}
+              </View>
             </View>
-          </View>
-          <Text style={[styles.testSectionHeader, { marginTop: 10 }]}>ENSAYO DE INSPECCION - IRAM 62353 - 5.2</Text>
-          <View style={styles.checkboxSection}>
-            <View style={styles.checkboxHeader}>
-              <Text style={styles.checkboxCol}>PASO</Text>
-              <Text style={styles.checkboxCol}>FALLO</Text>
-              <Text style={styles.checkboxCol}>N/A</Text>
-              <Text style={styles.checkboxColLabel}>ITEM</Text>
+            <Text style={[styles.testSectionHeader, { marginTop: 10 }]}>{sectionTitle}</Text>
+            <View style={styles.checkboxSection}>
+              <View style={styles.checkboxHeader}>
+                <Text style={styles.checkboxCol}>PASO</Text>
+                <Text style={styles.checkboxCol}>FALLO</Text>
+                <Text style={styles.checkboxCol}>N/A</Text>
+                <Text style={styles.checkboxColLabel}>{hasCriteria ? 'ITEM / CRITERIO' : 'ITEM'}</Text>
+              </View>
+              {sectionItems.map((item, index) => {
+                const result = getItemResult(item)
+                return (
+                  <View key={index} style={styles.checkboxItem}>
+                    <View style={styles.checkboxCol}>
+                      <View style={[styles.checkbox, result === 'pass' && styles.checkboxChecked]} />
+                    </View>
+                    <View style={styles.checkboxCol}>
+                      <View style={[styles.checkbox, result === 'fail' && styles.checkboxChecked]} />
+                    </View>
+                    <View style={styles.checkboxCol}>
+                      <View style={[styles.checkbox, result === 'na' && styles.checkboxChecked]} />
+                    </View>
+                    <View style={styles.checkboxColLabel}>
+                      <Text style={{ flexWrap: 'wrap' }}>{item.item_label}</Text>
+                      {item.criteria && (
+                        <Text style={styles.criteriaText}>Criterio: {item.criteria}</Text>
+                      )}
+                      {item.value && (
+                        <Text style={styles.valueText}>Valor{hasCriteria ? ' medido' : ''}: {item.value}</Text>
+                      )}
+                      {item.notes && (
+                        <Text style={styles.criteriaText}>Nota: {item.notes}</Text>
+                      )}
+                    </View>
+                  </View>
+                )
+              })}
             </View>
-            {inspectionItems.map((item, index) => {
-              const result = getItemResult(item)
-              return (
-                <View key={index} style={styles.checkboxItem}>
-                  <View style={styles.checkboxCol}>
-                    <View style={[styles.checkbox, result === 'pass' && styles.checkboxChecked]} />
-                  </View>
-                  <View style={styles.checkboxCol}>
-                    <View style={[styles.checkbox, result === 'fail' && styles.checkboxChecked]} />
-                  </View>
-                  <View style={styles.checkboxCol}>
-                    <View style={[styles.checkbox, result === 'na' && styles.checkboxChecked]} />
-                  </View>
-                  <View style={styles.checkboxColLabel}>
-                    <Text style={{ flexWrap: 'wrap' }}>{item.item_label}</Text>
-                    {item.value && (
-                      <Text style={styles.valueText}>Valor: {item.value}</Text>
-                    )}
-                    {item.notes && (
-                      <Text style={styles.criteriaText}>Nota: {item.notes}</Text>
-                    )}
-                  </View>
-                </View>
-              )
-            })}
-          </View>
-        </Page>
-      )}
-
-      {/* Página 3: Test de Seguridad Eléctrica - IRAM 62353 - 5.3 */}
-      {safetyItems.length > 0 && (
-        <Page size="A4" style={styles.page} wrap>
-          <View style={styles.header}>
-            <View style={styles.logoContainer}>
-              {logoBase64 ? (
-                <Image src={logoBase64} style={styles.logoImage} />
-              ) : (
-                <>
-                  <Text style={styles.logoText}>LEX</Text>
-                  <Text style={styles.logoSubtitle}>Servicios integrales para instituciones sanitarias</Text>
-                </>
-              )}
-            </View>
-          </View>
-          <Text style={[styles.testSectionHeader, { marginTop: 10 }]}>TEST DE SEGURIDAD ELECTRICA - IRAM 62353 - 5.3</Text>
-          <View style={styles.checkboxSection}>
-            <View style={styles.checkboxHeader}>
-              <Text style={styles.checkboxCol}>PASO</Text>
-              <Text style={styles.checkboxCol}>FALLO</Text>
-              <Text style={styles.checkboxCol}>N/A</Text>
-              <Text style={styles.checkboxColLabel}>ITEM / CRITERIO</Text>
-            </View>
-            {safetyItems.map((item, index) => {
-              const result = getItemResult(item)
-              return (
-                <View key={index} style={styles.checkboxItem}>
-                  <View style={styles.checkboxCol}>
-                    <View style={[styles.checkbox, result === 'pass' && styles.checkboxChecked]} />
-                  </View>
-                  <View style={styles.checkboxCol}>
-                    <View style={[styles.checkbox, result === 'fail' && styles.checkboxChecked]} />
-                  </View>
-                  <View style={styles.checkboxCol}>
-                    <View style={[styles.checkbox, result === 'na' && styles.checkboxChecked]} />
-                  </View>
-                  <View style={styles.checkboxColLabel}>
-                    <Text style={{ flexWrap: 'wrap' }}>{item.item_label}</Text>
-                    {item.criteria && (
-                      <Text style={styles.criteriaText}>Criterio: {item.criteria}</Text>
-                    )}
-                    {item.value && (
-                      <Text style={styles.valueText}>Valor medido: {item.value}</Text>
-                    )}
-                    {item.notes && (
-                      <Text style={styles.criteriaText}>Nota: {item.notes}</Text>
-                    )}
-                  </View>
-                </View>
-              )
-            })}
-          </View>
-        </Page>
-      )}
-
-      {/* Página 4: Ensayo de Performance - IRAM 62353 - 5.4 */}
-      {performanceItems.length > 0 && (
-        <Page size="A4" style={styles.page} wrap>
-          <View style={styles.header}>
-            <View style={styles.logoContainer}>
-              {logoBase64 ? (
-                <Image src={logoBase64} style={styles.logoImage} />
-              ) : (
-                <>
-                  <Text style={styles.logoText}>LEX</Text>
-                  <Text style={styles.logoSubtitle}>Servicios integrales para instituciones sanitarias</Text>
-                </>
-              )}
-            </View>
-          </View>
-          <Text style={[styles.testSectionHeader, { marginTop: 10 }]}>ENSAYO DE PERFORMANCE - IRAM 62353 - 5.4</Text>
-          <View style={styles.checkboxSection}>
-            <View style={styles.checkboxHeader}>
-              <Text style={styles.checkboxCol}>PASO</Text>
-              <Text style={styles.checkboxCol}>FALLO</Text>
-              <Text style={styles.checkboxCol}>N/A</Text>
-              <Text style={styles.checkboxColLabel}>ITEM</Text>
-            </View>
-            {performanceItems.map((item, index) => {
-              const result = getItemResult(item)
-              return (
-                <View key={index} style={styles.checkboxItem}>
-                  <View style={styles.checkboxCol}>
-                    <View style={[styles.checkbox, result === 'pass' && styles.checkboxChecked]} />
-                  </View>
-                  <View style={styles.checkboxCol}>
-                    <View style={[styles.checkbox, result === 'fail' && styles.checkboxChecked]} />
-                  </View>
-                  <View style={styles.checkboxCol}>
-                    <View style={[styles.checkbox, result === 'na' && styles.checkboxChecked]} />
-                  </View>
-                  <View style={styles.checkboxColLabel}>
-                    <Text style={{ flexWrap: 'wrap' }}>{item.item_label}</Text>
-                    {item.criteria && (
-                      <Text style={styles.criteriaText}>Criterio: {item.criteria}</Text>
-                    )}
-                    {item.value && (
-                      <Text style={styles.valueText}>Valor: {item.value}</Text>
-                    )}
-                    {item.notes && (
-                      <Text style={styles.criteriaText}>Nota: {item.notes}</Text>
-                    )}
-                  </View>
-                </View>
-              )
-            })}
-          </View>
-        </Page>
-      )}
+          </Page>
+        )
+      })}
+      
 
       {/* Página final: Repuestos y Observaciones */}
       {(test.spare_parts || test.observations) && (

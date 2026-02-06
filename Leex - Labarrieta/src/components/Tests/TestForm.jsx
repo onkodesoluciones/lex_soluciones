@@ -52,10 +52,11 @@ const TestForm = ({ test, defibrillators, templates, onClose, onSuccess }) => {
       setSelectedTemplate(template)
       
       if (!test) {
-        // Inicializar items desde el template
+        // Inicializar items desde el template, preservando la sección
         const items = template.items.map(item => ({
           item_key: item.key || item.label,
           item_label: item.label,
+          section: item.section || null, // Preservar la sección del template
           checked: false,
           value: '',
           notes: ''
@@ -123,6 +124,7 @@ const TestForm = ({ test, defibrillators, templates, onClose, onSuccess }) => {
             await testsService.addItems(savedTest.id, [{
               item_key: item.item_key,
               item_label: item.item_label,
+              section: item.section || null, // Preservar la sección
               checked: item.checked,
               result: item.result || (item.checked ? 'pass' : null), // Mantener result si existe
               value: item.value,
@@ -137,6 +139,7 @@ const TestForm = ({ test, defibrillators, templates, onClose, onSuccess }) => {
           await testsService.addItems(savedTest.id, checklistItems.map(item => ({
             item_key: item.item_key,
             item_label: item.item_label,
+            section: item.section || null, // Preservar la sección
             checked: item.checked,
             result: item.result || (item.checked ? 'pass' : null), // Mantener result si existe
             value: item.value,

@@ -9,14 +9,24 @@ import { X, Plus, Trash2 } from 'lucide-react'
 
 const PresupuestoForm = ({ presupuesto, onClose, onSuccess }) => {
   const [clients, setClients] = useState([])
+  // Función helper para obtener la fecha local en formato YYYY-MM-DD
+  const getLocalDateString = () => {
+    const now = new Date()
+    const year = now.getFullYear()
+    const month = String(now.getMonth() + 1).padStart(2, '0')
+    const day = String(now.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+
   const [formData, setFormData] = useState({
     client_id: '',
     presupuesto_number: '',
-    date: new Date().toISOString().split('T')[0],
+    date: getLocalDateString(),
     valid_until: '',
     items: [],
     notes: '',
-    status: 'pending'
+    status: 'pending',
+    tax_rate: 21 // Porcentaje de IVA: 21% o 10.5%
   })
   const [newItem, setNewItem] = useState({
     description: '',
@@ -32,14 +42,26 @@ const PresupuestoForm = ({ presupuesto, onClose, onSuccess }) => {
     if (!presupuesto) {
       generatePresupuestoNumber()
     } else {
+      // Si presupuesto.date viene como string, asegurarse de que esté en formato YYYY-MM-DD
+      let dateValue = presupuesto.date
+      if (dateValue && typeof dateValue === 'string') {
+        // Si viene como fecha completa con hora, extraer solo la fecha
+        if (dateValue.includes('T')) {
+          dateValue = dateValue.split('T')[0]
+        }
+      } else if (!dateValue) {
+        dateValue = getLocalDateString()
+      }
+
       setFormData({
         client_id: presupuesto.client_id || '',
         presupuesto_number: presupuesto.presupuesto_number || '',
-        date: presupuesto.date || new Date().toISOString().split('T')[0],
+        date: dateValue,
         valid_until: presupuesto.valid_until || '',
         items: presupuesto.items || [],
         notes: presupuesto.notes || '',
-        status: presupuesto.status || 'pending'
+        status: presupuesto.status || 'pending',
+        tax_rate: presupuesto.tax_rate || 21
       })
     }
   }, [])
@@ -104,7 +126,8 @@ const PresupuestoForm = ({ presupuesto, onClose, onSuccess }) => {
     const subtotal = formData.items.reduce((sum, item) => 
       sum + (item.quantity * item.unit_price), 0
     )
-    const tax = subtotal * 0.21 // IVA 21%
+    const taxRate = formData.tax_rate / 100 // Convertir porcentaje a decimal
+    const tax = subtotal * taxRate
     const total = subtotal + tax
 
     return { subtotal, tax, total }
@@ -128,13 +151,57 @@ const PresupuestoForm = ({ presupuesto, onClose, onSuccess }) => {
       setLoading(true)
       const { subtotal, tax, total } = calculateTotals()
 
+      // Asegurarse de que la fecha se envíe como string YYYY-MM-DD sin conversiones
+      let dateToSend = formData.date
+      if (dateToSend && typeof dateToSend === 'string') {
+        // Si viene como fecha completa con hora, extraer solo la fecha
+        if (dateToSend.includes('T')) {
+          dateToSend = dateToSend.split('T')[0]
+        }
+        // Asegurarse de que esté en formato YYYY-MM-DD
+        if (!dateToSend.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          // Si viene en otro formato, intentar parsearlo
+          const dateObj = new Date(dateToSend)
+          if (!isNaN(dateObj.getTime())) {
+            const year = dateObj.getFullYear()
+            const month = String(dateObj.getMonth() + 1).padStart(2, '0')
+            const day = String(dateObj.getDate()).padStart(2, '0')
+            dateToSend = `${year}-${month}-${day}`
+          }
+        }
+      }
+
+      // Hacer lo mismo para valid_until
+      let validUntilToSend = formData.valid_until
+      if (validUntilToSend && typeof validUntilToSend === 'string') {
+        if (validUntilToSend.includes('T')) {
+          validUntilToSend = validUntilToSend.split('T')[0]
+        }
+        if (!validUntilToSend.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          const dateObj = new Date(validUntilToSend)
+          if (!isNaN(dateObj.getTime())) {
+            const year = dateObj.getFullYear()
+            const month = String(dateObj.getMonth() + 1).padStart(2, '0')
+            const day = String(dateObj.getDate()).padStart(2, '0')
+            validUntilToSend = `${year}-${month}-${day}`
+          }
+        }
+      }
+
       const submitData = {
         ...formData,
+        date: dateToSend,
+        valid_until: validUntilToSend || null,
         items: formData.items,
         subtotal,
         tax,
-        total
+        total,
+        tax_rate: formData.tax_rate
       }
+
+      // Debug: verificar la fecha que se envía
+      console.log('Fecha original:', formData.date)
+      console.log('Fecha a enviar:', dateToSend)
 
       let savedPresupuesto
       if (presupuesto) {
@@ -255,6 +322,21 @@ const PresupuestoForm = ({ presupuesto, onClose, onSuccess }) => {
               </select>
             </div>
 
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                IVA
+              </label>
+              <select
+                name="tax_rate"
+                value={formData.tax_rate}
+                onChange={handleChange}
+                className="input-field"
+              >
+                <option value={21}>21%</option>
+                <option value={10.5}>10.5%</option>
+              </select>
+            </div>
+
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Cliente <span className="text-red-500">*</span>
@@ -371,7 +453,7 @@ const PresupuestoForm = ({ presupuesto, onClose, onSuccess }) => {
               <span className="font-medium">{formatCurrency(subtotal)}</span>
             </div>
             <div className="flex justify-between mb-2">
-              <span className="text-gray-600">IVA (21%):</span>
+              <span className="text-gray-600">IVA ({formData.tax_rate}%):</span>
               <span className="font-medium">{formatCurrency(tax)}</span>
             </div>
             <div className="flex justify-between pt-2 border-t border-gray-200">

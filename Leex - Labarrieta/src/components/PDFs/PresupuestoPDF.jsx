@@ -183,8 +183,21 @@ const styles = StyleSheet.create({
 const PresupuestoPDF = ({ presupuesto, client, logoBase64 }) => {
   const formatDate = (dateString) => {
     if (!dateString) return '-'
+    // Si la fecha viene en formato YYYY-MM-DD, parsearla directamente sin zona horaria
+    if (typeof dateString === 'string' && dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      const [year, month, day] = dateString.split('-')
+      const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
+      return date.toLocaleDateString('es-AR', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      })
+    }
+    // Para otros formatos, usar el método normal pero ajustar a hora local
     const date = new Date(dateString)
-    return date.toLocaleDateString('es-AR', {
+    // Ajustar a hora local para evitar problemas de zona horaria
+    const localDate = new Date(date.getTime() - (date.getTimezoneOffset() * 60000))
+    return localDate.toLocaleDateString('es-AR', {
       year: 'numeric',
       month: 'long',
       day: 'numeric'
@@ -330,7 +343,9 @@ const PresupuestoPDF = ({ presupuesto, client, logoBase64 }) => {
             <Text style={styles.totalValue}>{formatCurrency(presupuesto.subtotal || 0)}</Text>
           </View>
           <View style={styles.totalRow}>
-            <Text style={styles.totalLabel}>IVA (21%):</Text>
+            <Text style={styles.totalLabel}>
+              IVA ({presupuesto.tax_rate ? `${presupuesto.tax_rate}%` : '21%'}):
+            </Text>
             <Text style={styles.totalValue}>{formatCurrency(presupuesto.tax || 0)}</Text>
           </View>
           <View style={styles.grandTotal}>

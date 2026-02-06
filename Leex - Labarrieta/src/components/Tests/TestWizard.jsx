@@ -1,11 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { testsService } from '../../services/testsService'
 import { defibrillatorsService } from '../../services/defibrillatorsService'
 import { checklistTemplatesService } from '../../services/checklistTemplatesService'
 import { generateAndSavePDF } from '../../utils/pdfGenerator'
 import { loadLogoAsBase64 } from '../../utils/logoLoader'
 import TestPDF from '../PDFs/TestPDF'
-import { defaultInspectionItems, defaultSafetyItems, defaultPerformanceItems } from '../../utils/defaultTestItems'
 import { X, ChevronLeft, ChevronRight, Check } from 'lucide-react'
 
 const TestWizard = ({ defibrillators, templates, onClose, onSuccess }) => {
@@ -30,36 +29,78 @@ const TestWizard = ({ defibrillators, templates, onClose, onSuccess }) => {
     // Paso 3: Motivo
     maintenance_type: '', // 'preventive', 'corrective' o 'annual'
     
-    // Paso 4-6: Resultados de ensayos (items predefinidos IRAM 62353)
-    inspection_items: [...defaultInspectionItems],
-    safety_items: [...defaultSafetyItems],
-    performance_items: [...defaultPerformanceItems],
+    // Items organizados por sección (dinámico según plantilla)
+    sectionItems: {}, // { '5.1': [...], '5.2': [...], etc. }
     
-    // Paso 7: Repuestos
+    // Paso final: Repuestos
     spare_parts: '',
     
-    // Paso 8: Observaciones
+    // Paso final: Observaciones
     observations: '',
     
-    // Paso 9: Resultado final
+    // Paso final: Resultado final
     result: 'pending'
   })
   
   const [selectedTemplate, setSelectedTemplate] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [templateSections, setTemplateSections] = useState([]) // Array de secciones ordenadas: ['5.1', '5.2', etc.]
 
-  const steps = [
-    'Datos del Equipo',
-    'Instrumental',
-    'Motivo',
-    'Inspección (5.2)',
-    'Seguridad Eléctrica (5.3)',
-    'Performance (5.4)',
-    'Repuestos',
-    'Observaciones',
-    'Finalizar'
-  ]
+  // Generar pasos dinámicamente
+  const steps = useMemo(() => {
+    const baseSteps = [
+      'Datos del Equipo',
+      'Instrumental',
+      'Motivo'
+    ]
+    
+    // Agregar pasos para cada sección de la plantilla
+    const sectionSteps = templateSections.map(section => {
+      // Obtener título de la sección desde la plantilla
+      let sectionName = `Sección ${section}`
+      if (selectedTemplate?.sections && selectedTemplate.sections[section] && selectedTemplate.sections[section].title) {
+        sectionName = selectedTemplate.sections[section].title
+      } else {
+        // Fallback a nombres conocidos si no hay título personalizado
+        sectionName = section === '5.1' ? 'Sección 5.1' :
+                      section === '5.2' ? 'Inspección (5.2)' :
+                      section === '5.3' ? 'Seguridad Eléctrica (5.3)' :
+                      section === '5.4' ? 'Performance (5.4)' :
+                      `Sección ${section}`
+      }
+      return sectionName
+    })
+    
+    // Agregar pasos finales
+    const finalSteps = [
+      'Repuestos',
+      'Observaciones',
+      'Finalizar'
+    ]
+    
+    return [...baseSteps, ...sectionSteps, ...finalSteps]
+  }, [templateSections, selectedTemplate])
+
+  // Cargar plantilla "Estándar" por defecto al iniciar
+  useEffect(() => {
+    const loadDefaultTemplate = async () => {
+      try {
+        // Buscar plantilla "Estándar"
+        const standardTemplate = templates.find(t => t.name === 'Estándar' || t.name === 'estándar' || t.name === 'Estandar')
+        if (standardTemplate) {
+          setFormData(prev => ({ ...prev, template_id: standardTemplate.id }))
+          await loadTemplate(standardTemplate.id)
+        }
+      } catch (err) {
+        console.error('Error al cargar plantilla estándar:', err)
+      }
+    }
+    
+    if (templates.length > 0 && !formData.template_id) {
+      loadDefaultTemplate()
+    }
+  }, [templates])
 
   useEffect(() => {
     if (formData.defibrillator_id) {
@@ -68,10 +109,8 @@ const TestWizard = ({ defibrillators, templates, onClose, onSuccess }) => {
   }, [formData.defibrillator_id])
 
   useEffect(() => {
-    // Los items predefinidos ya están cargados por defecto
-    // Si se selecciona una plantilla, se pueden agregar items adicionales o personalizar
     if (formData.template_id) {
-      loadTemplate()
+      loadTemplate(formData.template_id)
     }
   }, [formData.template_id])
 
@@ -88,14 +127,58 @@ const TestWizard = ({ defibrillators, templates, onClose, onSuccess }) => {
     }
   }
 
-  const loadTemplate = async () => {
+  const loadTemplate = async (templateId) => {
     try {
-      const template = await checklistTemplatesService.getById(formData.template_id)
+      const id = templateId || formData.template_id
+      if (!id) return
+      
+      const template = await checklistTemplatesService.getById(id)
       setSelectedTemplate(template)
       
-      // Si hay una plantilla personalizada, se pueden agregar items adicionales
-      // Por ahora mantenemos los items predefinidos como base
-      // En el futuro se pueden fusionar o reemplazar según necesidad
+      // Organizar items por sección
+      const itemsBySection = {}
+      const sectionsSet = new Set()
+      
+      if (template.items && Array.isArray(template.items)) {
+        template.items.forEach(item => {
+          const section = item.section || '5.2' // Default a 5.2 si no tiene sección
+          sectionsSet.add(section)
+          
+          if (!itemsBySection[section]) {
+            itemsBySection[section] = []
+          }
+          
+          // Convertir formato de plantilla a formato de test
+          itemsBySection[section].push({
+            item_key: item.key || item.item_key || `item_${Date.now()}_${Math.random()}`,
+            item_label: item.label || item.item_label,
+            section: section,
+            criteria: item.criteria || '',
+            result: null,
+            value: '',
+            notes: ''
+          })
+        })
+      }
+      
+      // Ordenar secciones: 5.1, 5.2, 5.3, 5.4, y luego cualquier otra
+      const sortedSections = Array.from(sectionsSet).sort((a, b) => {
+        // Si ambas son numéricas (5.x), ordenar numéricamente
+        if (a.match(/^5\.\d+$/) && b.match(/^5\.\d+$/)) {
+          return parseFloat(a) - parseFloat(b)
+        }
+        // Si solo una es numérica, la numérica va primero
+        if (a.match(/^5\.\d+$/)) return -1
+        if (b.match(/^5\.\d+$/)) return 1
+        // Ambas son no numéricas, orden alfabético
+        return a.localeCompare(b)
+      })
+      
+      setTemplateSections(sortedSections)
+      setFormData(prev => ({
+        ...prev,
+        sectionItems: itemsBySection
+      }))
     } catch (err) {
       console.error('Error al cargar plantilla:', err)
     }
@@ -122,16 +205,26 @@ const TestWizard = ({ defibrillators, templates, onClose, onSuccess }) => {
   }
 
   const handleItemChange = (section, index, field, value) => {
-    const sectionKey = `${section}_items`
-    const updated = [...formData[sectionKey]]
-    updated[index] = {
-      ...updated[index],
-      [field]: value
-    }
-    setFormData(prev => ({
-      ...prev,
-      [sectionKey]: updated
-    }))
+    setFormData(prev => {
+      const updatedSectionItems = { ...prev.sectionItems }
+      if (!updatedSectionItems[section]) {
+        updatedSectionItems[section] = []
+      }
+      
+      const updated = [...updatedSectionItems[section]]
+      updated[index] = {
+        ...updated[index],
+        [field]: value
+      }
+      
+      return {
+        ...prev,
+        sectionItems: {
+          ...updatedSectionItems,
+          [section]: updated
+        }
+      }
+    })
   }
 
   const handleNext = () => {
@@ -158,12 +251,13 @@ const TestWizard = ({ defibrillators, templates, onClose, onSuccess }) => {
     try {
       setLoading(true)
       
-      // Combinar todos los items
-      const allItems = [
-        ...formData.inspection_items,
-        ...formData.safety_items,
-        ...formData.performance_items
-      ]
+      // Combinar todos los items de todas las secciones
+      const allItems = []
+      Object.keys(formData.sectionItems).forEach(section => {
+        if (formData.sectionItems[section] && Array.isArray(formData.sectionItems[section])) {
+          allItems.push(...formData.sectionItems[section])
+        }
+      })
 
       // Crear el ensayo
       const testData = {
@@ -251,7 +345,108 @@ const TestWizard = ({ defibrillators, templates, onClose, onSuccess }) => {
     }
   }
 
+  // Función helper para renderizar una sección de items
+  const renderSectionItems = (section) => {
+    const items = formData.sectionItems[section] || []
+    const sectionName = section === '5.1' ? 'Sección 5.1' :
+                      section === '5.2' ? 'ENSAYO DE INSPECCION - IRAM 62353 - 5.2' :
+                      section === '5.3' ? 'TEST DE SEGURIDAD ELECTRICA - IRAM 62353 - 5.3' :
+                      section === '5.4' ? 'ENSAYO DE PERFORMANCE - IRAM 62353 - 5.4' :
+                      `Sección ${section}`
+    
+    if (items.length === 0) {
+      return (
+        <p className="text-gray-500 text-center py-8">
+          No hay items en esta sección.
+        </p>
+      )
+    }
+    
+    return (
+      <div className="space-y-3">
+        {items.map((item, index) => (
+          <div key={index} className="border border-gray-200 rounded-lg p-4">
+            <div className="flex items-start gap-4">
+              <div className="flex-1">
+                <p className="font-medium text-gray-900 mb-2">{item.item_label}</p>
+                {item.criteria && (
+                  <p className="text-sm text-gray-600 mb-2 font-semibold">Criterio: {item.criteria}</p>
+                )}
+                {item.result === 'pass' && item.value && (
+                  <p className="text-sm text-gray-600">Valor medido: {item.value}</p>
+                )}
+                {item.notes && (
+                  <p className="text-sm text-gray-500 italic mt-2">Nota: {item.notes}</p>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleItemChange(section, index, 'result', 'pass')}
+                  className={`px-4 py-2 rounded-lg border-2 transition-colors ${
+                    item.result === 'pass'
+                      ? 'bg-green-50 border-green-500 text-green-700'
+                      : 'border-gray-200 hover:border-green-300'
+                  }`}
+                >
+                  PASO
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleItemChange(section, index, 'result', 'fail')}
+                  className={`px-4 py-2 rounded-lg border-2 transition-colors ${
+                    item.result === 'fail'
+                      ? 'bg-red-50 border-red-500 text-red-700'
+                      : 'border-gray-200 hover:border-red-300'
+                  }`}
+                >
+                  FALLO
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleItemChange(section, index, 'result', 'na')}
+                  className={`px-4 py-2 rounded-lg border-2 transition-colors ${
+                    item.result === 'na'
+                      ? 'bg-gray-50 border-gray-500 text-gray-700'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  N/A
+                </button>
+              </div>
+            </div>
+            {(item.result === 'pass' || item.result === 'fail') && (
+              <div className="mt-3 pt-3 border-t border-gray-200">
+                <input
+                  type="text"
+                  placeholder="Valor medido (opcional)"
+                  value={item.value || ''}
+                  onChange={(e) => handleItemChange(section, index, 'value', e.target.value)}
+                  className="input-field mb-2"
+                />
+                <textarea
+                  placeholder="Notas (opcional)"
+                  value={item.notes || ''}
+                  onChange={(e) => handleItemChange(section, index, 'notes', e.target.value)}
+                  rows="2"
+                  className="input-field"
+                />
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    )
+  }
+
   const renderStep = () => {
+    // Calcular índices dinámicos
+    const baseStepsCount = 3 // Datos, Instrumental, Motivo
+    const sectionsCount = templateSections.length
+    const repuestosIndex = baseStepsCount + sectionsCount
+    const observacionesIndex = baseStepsCount + sectionsCount + 1
+    const finalizarIndex = baseStepsCount + sectionsCount + 2
+    
     switch (currentStep) {
       case 0: // Datos del Equipo
         return (
@@ -491,352 +686,119 @@ const TestWizard = ({ defibrillators, templates, onClose, onSuccess }) => {
           </div>
         )
 
-      case 3: // Inspección
-        return (
-          <div className="space-y-4">
-            <h3 className="text-xl font-semibold mb-4">ENSAYO DE INSPECCION - IRAM 62353 - 5.2</h3>
-            {formData.inspection_items.length === 0 ? (
-              <p className="text-gray-500 text-center py-8">
-                No hay items de inspección disponibles.
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {formData.inspection_items.map((item, index) => (
-                  <div key={index} className="border border-gray-200 rounded-lg p-4">
-                    <div className="flex items-start gap-4">
-                      <div className="flex-1">
-                        <p className="font-medium text-gray-900 mb-2">{item.item_label}</p>
-                        {item.criteria && (
-                          <p className="text-sm text-gray-600 mb-2">Criterio: {item.criteria}</p>
-                        )}
-                        {item.result === 'pass' && item.value && (
-                          <p className="text-sm text-gray-600">Valor medido: {item.value}</p>
-                        )}
-                        {item.notes && (
-                          <p className="text-sm text-gray-500 italic mt-2">Nota: {item.notes}</p>
-                        )}
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleItemChange('inspection', index, 'result', 'pass')}
-                          className={`px-4 py-2 rounded-lg border-2 transition-colors ${
-                            item.result === 'pass'
-                              ? 'bg-green-50 border-green-500 text-green-700'
-                              : 'border-gray-200 hover:border-green-300'
-                          }`}
-                        >
-                          PASO
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleItemChange('inspection', index, 'result', 'fail')}
-                          className={`px-4 py-2 rounded-lg border-2 transition-colors ${
-                            item.result === 'fail'
-                              ? 'bg-red-50 border-red-500 text-red-700'
-                              : 'border-gray-200 hover:border-red-300'
-                          }`}
-                        >
-                          FALLO
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleItemChange('inspection', index, 'result', 'na')}
-                          className={`px-4 py-2 rounded-lg border-2 transition-colors ${
-                            item.result === 'na'
-                              ? 'bg-gray-50 border-gray-500 text-gray-700'
-                              : 'border-gray-200 hover:border-gray-300'
-                          }`}
-                        >
-                          N/A
-                        </button>
-                      </div>
-                    </div>
-                    {(item.result === 'pass' || item.result === 'fail') && (
-                      <div className="mt-3 pt-3 border-t border-gray-200">
-                        <input
-                          type="text"
-                          placeholder="Valor medido (opcional)"
-                          value={item.value}
-                          onChange={(e) => handleItemChange('inspection', index, 'value', e.target.value)}
-                          className="input-field mb-2"
-                        />
-                        <textarea
-                          placeholder="Notas (opcional)"
-                          value={item.notes}
-                          onChange={(e) => handleItemChange('inspection', index, 'notes', e.target.value)}
-                          rows="2"
-                          className="input-field"
-                        />
-                      </div>
-                    )}
+      // Casos dinámicos para secciones de la plantilla
+      default:
+        // Verificar si es una sección de la plantilla
+        if (currentStep >= baseStepsCount && currentStep < repuestosIndex) {
+          const sectionIndex = currentStep - baseStepsCount
+          const section = templateSections[sectionIndex]
+          if (section) {
+            // Obtener título de la sección desde la plantilla
+            let sectionName = `Sección ${section}`
+            if (selectedTemplate?.sections && selectedTemplate.sections[section] && selectedTemplate.sections[section].title) {
+              sectionName = selectedTemplate.sections[section].title
+            }
+            
+            return (
+              <div className="space-y-4">
+                <h3 className="text-xl font-semibold mb-4">{sectionName}</h3>
+                {renderSectionItems(section)}
+              </div>
+            )
+          }
+        }
+        
+        // Casos finales
+        if (currentStep === repuestosIndex) {
+          return (
+            <div className="space-y-4">
+              <h3 className="text-xl font-semibold mb-4">REPUESTOS</h3>
+              <textarea
+                name="spare_parts"
+                value={formData.spare_parts}
+                onChange={handleChange}
+                rows="6"
+                className="input-field"
+                placeholder="Listar repuestos utilizados (ej: Batería 12V 4.5Ah, etc.)"
+              />
+            </div>
+          )
+        }
+
+        if (currentStep === observacionesIndex) {
+          return (
+            <div className="space-y-4">
+              <h3 className="text-xl font-semibold mb-4">OBSERVACIONES</h3>
+              <textarea
+                name="observations"
+                value={formData.observations}
+                onChange={handleChange}
+                rows="8"
+                className="input-field"
+                placeholder="Observaciones generales del ensayo..."
+              />
+            </div>
+          )
+        }
+
+        if (currentStep === finalizarIndex) {
+          // Calcular estadísticas de todos los items
+          const allItems = []
+          Object.keys(formData.sectionItems).forEach(section => {
+            if (formData.sectionItems[section] && Array.isArray(formData.sectionItems[section])) {
+              allItems.push(...formData.sectionItems[section])
+            }
+          })
+          
+          const totalItems = allItems.length
+          const passedItems = allItems.filter(item => item.result === 'pass').length
+          const failedItems = allItems.filter(item => item.result === 'fail').length
+
+          return (
+            <div className="space-y-4">
+              <h3 className="text-xl font-semibold mb-4">Resumen del Ensayo</h3>
+              <div className="card">
+                <div className="grid grid-cols-3 gap-4 mb-4">
+                  <div className="text-center p-4 bg-gray-50 rounded-lg">
+                    <p className="text-2xl font-bold text-gray-900">{totalItems}</p>
+                    <p className="text-sm text-gray-600">Total Items</p>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )
-
-      case 4: // Seguridad Eléctrica
-        return (
-          <div className="space-y-4">
-            <h3 className="text-xl font-semibold mb-4">TEST DE SEGURIDAD ELECTRICA - IRAM 62353 - 5.3</h3>
-            {formData.safety_items.length === 0 ? (
-              <p className="text-gray-500 text-center py-8">
-                No hay items de seguridad eléctrica disponibles.
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {formData.safety_items.map((item, index) => (
-                  <div key={index} className="border border-gray-200 rounded-lg p-4">
-                    <div className="flex items-start gap-4">
-                      <div className="flex-1">
-                        <p className="font-medium text-gray-900 mb-2">{item.item_label}</p>
-                        {item.criteria && (
-                          <p className="text-sm text-gray-600 mb-2 font-semibold">Criterio: {item.criteria}</p>
-                        )}
-                        {item.result === 'pass' && item.value && (
-                          <p className="text-sm text-gray-600">Valor medido: {item.value}</p>
-                        )}
-                        {item.notes && (
-                          <p className="text-sm text-gray-500 italic mt-2">Nota: {item.notes}</p>
-                        )}
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleItemChange('safety', index, 'result', 'pass')}
-                          className={`px-4 py-2 rounded-lg border-2 transition-colors ${
-                            item.result === 'pass'
-                              ? 'bg-green-50 border-green-500 text-green-700'
-                              : 'border-gray-200 hover:border-green-300'
-                          }`}
-                        >
-                          PASO
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleItemChange('safety', index, 'result', 'fail')}
-                          className={`px-4 py-2 rounded-lg border-2 transition-colors ${
-                            item.result === 'fail'
-                              ? 'bg-red-50 border-red-500 text-red-700'
-                              : 'border-gray-200 hover:border-red-300'
-                          }`}
-                        >
-                          FALLO
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleItemChange('safety', index, 'result', 'na')}
-                          className={`px-4 py-2 rounded-lg border-2 transition-colors ${
-                            item.result === 'na'
-                              ? 'bg-gray-50 border-gray-500 text-gray-700'
-                              : 'border-gray-200 hover:border-gray-300'
-                          }`}
-                        >
-                          N/A
-                        </button>
-                      </div>
-                    </div>
-                    {(item.result === 'pass' || item.result === 'fail') && (
-                      <div className="mt-3 pt-3 border-t border-gray-200">
-                        <input
-                          type="text"
-                          placeholder="Valor medido (ej: 0.25Ω, 50μA)"
-                          value={item.value}
-                          onChange={(e) => handleItemChange('safety', index, 'value', e.target.value)}
-                          className="input-field mb-2"
-                        />
-                        <textarea
-                          placeholder="Notas (opcional)"
-                          value={item.notes}
-                          onChange={(e) => handleItemChange('safety', index, 'notes', e.target.value)}
-                          rows="2"
-                          className="input-field"
-                        />
-                      </div>
-                    )}
+                  <div className="text-center p-4 bg-green-50 rounded-lg">
+                    <p className="text-2xl font-bold text-green-700">{passedItems}</p>
+                    <p className="text-sm text-gray-600">Aprobados</p>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )
-
-      case 5: // Performance
-        return (
-          <div className="space-y-4">
-            <h3 className="text-xl font-semibold mb-4">ENSAYO DE PERFORMANCE - IRAM 62353 - 5.4</h3>
-            {formData.performance_items.length === 0 ? (
-              <p className="text-gray-500 text-center py-8">
-                No hay items de performance disponibles.
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {formData.performance_items.map((item, index) => (
-                  <div key={index} className="border border-gray-200 rounded-lg p-4">
-                    <div className="flex items-start gap-4">
-                      <div className="flex-1">
-                        <p className="font-medium text-gray-900 mb-2">{item.item_label}</p>
-                        {item.criteria && (
-                          <p className="text-sm text-gray-600 mb-2">Criterio: {item.criteria}</p>
-                        )}
-                        {item.result === 'pass' && item.value && (
-                          <p className="text-sm text-gray-600">Valor medido: {item.value}</p>
-                        )}
-                        {item.notes && (
-                          <p className="text-sm text-gray-500 italic mt-2">Nota: {item.notes}</p>
-                        )}
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleItemChange('performance', index, 'result', 'pass')}
-                          className={`px-4 py-2 rounded-lg border-2 transition-colors ${
-                            item.result === 'pass'
-                              ? 'bg-green-50 border-green-500 text-green-700'
-                              : 'border-gray-200 hover:border-green-300'
-                          }`}
-                        >
-                          PASO
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleItemChange('performance', index, 'result', 'fail')}
-                          className={`px-4 py-2 rounded-lg border-2 transition-colors ${
-                            item.result === 'fail'
-                              ? 'bg-red-50 border-red-500 text-red-700'
-                              : 'border-gray-200 hover:border-red-300'
-                          }`}
-                        >
-                          FALLO
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleItemChange('performance', index, 'result', 'na')}
-                          className={`px-4 py-2 rounded-lg border-2 transition-colors ${
-                            item.result === 'na'
-                              ? 'bg-gray-50 border-gray-500 text-gray-700'
-                              : 'border-gray-200 hover:border-gray-300'
-                          }`}
-                        >
-                          N/A
-                        </button>
-                      </div>
-                    </div>
-                    {(item.result === 'pass' || item.result === 'fail') && (
-                      <div className="mt-3 pt-3 border-t border-gray-200">
-                        <input
-                          type="text"
-                          placeholder="Valor medido (opcional)"
-                          value={item.value}
-                          onChange={(e) => handleItemChange('performance', index, 'value', e.target.value)}
-                          className="input-field mb-2"
-                        />
-                        <textarea
-                          placeholder="Notas (opcional)"
-                          value={item.notes}
-                          onChange={(e) => handleItemChange('performance', index, 'notes', e.target.value)}
-                          rows="2"
-                          className="input-field"
-                        />
-                      </div>
-                    )}
+                  <div className="text-center p-4 bg-red-50 rounded-lg">
+                    <p className="text-2xl font-bold text-red-700">{failedItems}</p>
+                    <p className="text-sm text-gray-600">Fallidos</p>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )
-
-      case 6: // Repuestos
-        return (
-          <div className="space-y-4">
-            <h3 className="text-xl font-semibold mb-4">REPUESTOS</h3>
-            <textarea
-              name="spare_parts"
-              value={formData.spare_parts}
-              onChange={handleChange}
-              rows="6"
-              className="input-field"
-              placeholder="Listar repuestos utilizados (ej: Batería 12V 4.5Ah, etc.)"
-            />
-          </div>
-        )
-
-      case 7: // Observaciones
-        return (
-          <div className="space-y-4">
-            <h3 className="text-xl font-semibold mb-4">OBSERVACIONES</h3>
-            <textarea
-              name="observations"
-              value={formData.observations}
-              onChange={handleChange}
-              rows="8"
-              className="input-field"
-              placeholder="Observaciones generales del ensayo..."
-            />
-          </div>
-        )
-
-      case 8: // Finalizar
-        const totalItems = formData.inspection_items.length + formData.safety_items.length + formData.performance_items.length
-        const passedItems = [
-          ...formData.inspection_items,
-          ...formData.safety_items,
-          ...formData.performance_items
-        ].filter(item => item.result === 'pass').length
-        const failedItems = [
-          ...formData.inspection_items,
-          ...formData.safety_items,
-          ...formData.performance_items
-        ].filter(item => item.result === 'fail').length
-
-        return (
-          <div className="space-y-4">
-            <h3 className="text-xl font-semibold mb-4">Resumen del Ensayo</h3>
-            <div className="card">
-              <div className="grid grid-cols-3 gap-4 mb-4">
-                <div className="text-center p-4 bg-gray-50 rounded-lg">
-                  <p className="text-2xl font-bold text-gray-900">{totalItems}</p>
-                  <p className="text-sm text-gray-600">Total Items</p>
                 </div>
-                <div className="text-center p-4 bg-green-50 rounded-lg">
-                  <p className="text-2xl font-bold text-green-700">{passedItems}</p>
-                  <p className="text-sm text-gray-600">Aprobados</p>
+                
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Resultado Final
+                  </label>
+                  <select
+                    name="result"
+                    value={formData.result}
+                    onChange={handleChange}
+                    className="input-field"
+                  >
+                    <option value="pending">Pendiente</option>
+                    <option value="passed">Aprobado</option>
+                    <option value="failed">Rechazado</option>
+                  </select>
                 </div>
-                <div className="text-center p-4 bg-red-50 rounded-lg">
-                  <p className="text-2xl font-bold text-red-700">{failedItems}</p>
-                  <p className="text-sm text-gray-600">Fallidos</p>
-                </div>
-              </div>
-              
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Resultado Final
-                </label>
-                <select
-                  name="result"
-                  value={formData.result}
-                  onChange={handleChange}
-                  className="input-field"
-                >
-                  <option value="pending">Pendiente</option>
-                  <option value="passed">Aprobado</option>
-                  <option value="failed">Rechazado</option>
-                </select>
-              </div>
 
-              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <p className="text-sm text-blue-800">
-                  Al finalizar, se generará automáticamente el PDF con todos los datos del ensayo.
-                </p>
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm text-blue-800">
+                    Al finalizar, se generará automáticamente el PDF con todos los datos del ensayo.
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
-        )
-
-      default:
+          )
+        }
+        
         return null
     }
   }
@@ -847,7 +809,7 @@ const TestWizard = ({ defibrillators, templates, onClose, onSuccess }) => {
         {/* Header */}
         <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">Nuevo Ensayo - Paso a Paso</h2>
+            <h2 className="text-2xl font-bold text-gray-900">Nuevo Ensayo</h2>
             <p className="text-sm text-gray-600 mt-1">
               Paso {currentStep + 1} de {steps.length}: {steps[currentStep]}
             </p>
